@@ -10,12 +10,17 @@ import {
   moveTask,
   parseHMS,
   pauseTimer,
+  placeProject,
+  placeTask,
+  projectTasks,
   projectTree,
+  renameProject,
+  setProjectColor,
   setTimeSpent,
   startTimer,
   todayTasks,
 } from "./db";
-import { INBOX_ID } from "./types";
+import { DEFAULT_PROJECT_COLOR, INBOX_ID } from "./types";
 
 describe("projects and sections", () => {
   it("allows one level of subprojects only", () => {
@@ -108,5 +113,69 @@ describe("task timer", () => {
     expect(parseHMS("45")).toBe(45);
     expect(parseHMS("1:75:00")).toBeNull();
     expect(parseHMS("abc")).toBeNull();
+  });
+});
+
+describe("editing and arranging projects", () => {
+  it("renames and recolors; new projects default to grey", () => {
+    const a = addProject(emptyState(), { name: "Home" });
+    expect(a.project.color).toBe(DEFAULT_PROJECT_COLOR);
+    let s = renameProject(a.state, a.project.id, "  House ");
+    s = setProjectColor(s, a.project.id, "#ef4444");
+    expect(s.projects.find((p) => p.id === a.project.id)).toMatchObject({ name: "House", color: "#ef4444" });
+    expect(() => renameProject(s, a.project.id, " ")).toThrow(/required/);
+    expect(() => renameProject(s, INBOX_ID, "Box")).toThrow(/Inbox/);
+    expect(addProject(s, { name: "Red", color: "#ef4444" }).project.color).toBe("#ef4444");
+  });
+
+  it("reorders, nests and un-nests one level only", () => {
+    const a = addProject(emptyState(), { name: "A" });
+    const b = addProject(a.state, { name: "B" });
+    const c = addProject(b.state, { name: "C" });
+    const a1 = addProject(c.state, { name: "A1", parentId: a.project.id });
+    let s = a1.state;
+    const names = (st = s) => projectTree(st).map((n) => [n.project.name, ...n.children.map((x) => x.name)].join(">"));
+
+    s = placeProject(s, c.project.id, { parentId: null, index: 0 });
+    expect(names()).toEqual(["C", "A>A1", "B"]);
+    s = placeProject(s, b.project.id, { parentId: a.project.id, index: 0 });
+    expect(names()).toEqual(["C", "A>B>A1"]);
+    s = placeProject(s, a1.project.id, { parentId: null, index: 1 });
+    expect(names()).toEqual(["C", "A1", "A>B"]);
+    // A has a subproject, so it cannot go under C; nothing goes under a subproject.
+    expect(() => placeProject(s, a.project.id, { parentId: c.project.id, index: 0 })).toThrow(/one level/);
+    expect(() => placeProject(s, c.project.id, { parentId: b.project.id, index: 0 })).toThrow(/one level/);
+    expect(() => placeProject(s, c.project.id, { parentId: c.project.id, index: 0 })).toThrow(/one level/);
+  });
+});
+
+describe("dragging tasks in a project", () => {
+  it("reorders within a section and moves between sections and projects with subtasks", () => {
+    const p = addProject(emptyState(), { name: "P" });
+    const q = addProject(p.state, { name: "Q" });
+    const sec = addSection(q.state, { name: "Doing", projectId: p.project.id });
+    let s = sec.state;
+    const ids: string[] = [];
+    for (const title of ["one", "two", "three"]) {
+      const r = addTask(s, { title, projectId: p.project.id });
+      s = r.state;
+      ids.push(r.task.id);
+    }
+    const sub = addTask(s, { title: "sub", parentId: ids[0] });
+    s = sub.state;
+    const titles = (st = s) => {
+      const v = projectTasks(st, p.project.id);
+      return [v.unsectioned.map((t) => t.title), ...v.sections.map((x) => x.tasks.map((t) => t.title))];
+    };
+
+    s = placeTask(s, ids[2], { projectId: p.project.id, sectionId: null, index: 0 });
+    expect(titles()).toEqual([["three", "one", "two"], []]);
+    s = placeTask(s, ids[0], { projectId: p.project.id, sectionId: sec.section.id, index: 0 });
+    expect(titles()).toEqual([["three", "two"], ["one"]]);
+    expect(s.tasks.find((t) => t.id === sub.task.id)!.sectionId).toBe(sec.section.id);
+    s = placeTask(s, ids[0], { projectId: q.project.id, sectionId: null, index: 0 });
+    expect(titles()).toEqual([["three", "two"], []]);
+    expect(s.tasks.find((t) => t.id === sub.task.id)!.projectId).toBe(q.project.id);
+    expect(() => placeTask(s, sub.task.id, { projectId: p.project.id, sectionId: null, index: 0 })).toThrow(/Subtasks/);
   });
 });

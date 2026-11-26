@@ -86,6 +86,31 @@ describe("parseQuickAdd", () => {
     expect(p.title).toBe("Buy a gift for mom");
   });
 
+  it("parses bare durations without 'for'", () => {
+    const w = world().s;
+    const cases: [string, number][] = [
+      ["a 15m", 15],
+      ["a 30m", 30],
+      ["a 1h", 60],
+      ["a 1hr", 60],
+      ["a for 1hr", 60],
+      ["a 1h30m", 90],
+      ["a 1.5h", 90],
+      ["a 45 min", 45],
+      ["a for 2 hours", 120],
+    ];
+    for (const [text, min] of cases) {
+      const p = parseQuickAdd(text, w, { now });
+      expect(p.durationMin, text).toBe(min);
+      expect(p.title, text).toBe("a");
+    }
+    const q = parseQuickAdd("Gym tom 7pm 45m p2", w, { now });
+    expect(q).toMatchObject({ title: "Gym", durationMin: 45, dueTime: "19:00", priority: 2 });
+    // "in 30m" is a due time, not a duration; plain numbers stay in the title.
+    expect(parseQuickAdd("Call back in 30m", w, { now }).durationMin).toBeNull();
+    expect(parseQuickAdd("Run 5k", w, { now }).durationMin).toBeNull();
+  });
+
   it("supports deadline with an explicit date and today/tomorrow due words", () => {
     const w = world().s;
     expect(parseQuickAdd("a {12/5}", w, { now }).deadline).toBe("2026-12-05");
