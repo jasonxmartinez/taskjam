@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addTask, emptyState } from "../model/db";
-import { addDays, dayRange, layoutTimed, minutesToTime, snapMinutes } from "./layout";
+import { addDays, dayRange, formatDuration, layoutTimed, minutesToTime, resizeDuration, snapMinutes } from "./layout";
 
 const mk = (title: string, dueTime: string, durationMin: number | null = null) =>
   addTask(emptyState(), { title, dueDate: "2026-11-25", dueTime, durationMin }).task;
@@ -33,5 +33,26 @@ describe("calendar layout", () => {
     const [p] = layoutTimed([mk("a", "08:00")]);
     expect(p.height).toBe(30);
     expect(layoutTimed([addTask(emptyState(), { title: "x", dueDate: "2026-11-25" }).task])).toEqual([]);
+  });
+});
+
+describe("resizeDuration", () => {
+  // HOUR_PX is 48, so 12px = 15 minutes.
+  it("snaps to 15-minute steps", () => {
+    expect(resizeDuration(9 * 60, 30, 12)).toBe(45);
+    expect(resizeDuration(9 * 60, 30, 17)).toBe(45);
+    expect(resizeDuration(9 * 60, 30, 19)).toBe(60);
+    expect(resizeDuration(9 * 60, 30, 48)).toBe(90);
+  });
+  it("never goes below 15 minutes", () => {
+    expect(resizeDuration(9 * 60, 30, -200)).toBe(15);
+  });
+  it("stops at midnight", () => {
+    expect(resizeDuration(23 * 60, 30, 500)).toBe(60);
+  });
+  it("formats durations", () => {
+    expect(formatDuration(45)).toBe("45m");
+    expect(formatDuration(60)).toBe("1h");
+    expect(formatDuration(90)).toBe("1h 30m");
   });
 });

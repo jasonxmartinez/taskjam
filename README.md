@@ -6,11 +6,11 @@ A personal, Todoist-style task manager. Local-first, no subscription.
 
 ## What works now
 
-- Quick add (press `Q`): `#Project`, `#Parent/Sub` (or `#"Name with spaces"`), `/Section`, `p1`-`p4`, `@label`, natural dates and times (`tue 7pm`, `tom`, `fri`), `{deadline}`, `every mon`, `for 1h30m`. Unknown projects and sections are created. Click a highlighted chip to turn it back into plain text.
+- Quick add (press `Q`): `#Project`, `#Parent/Sub` (or `#"Name with spaces"`), `/Section`, `p1`-`p4`, `@label`, natural dates and times (`tue 7pm`, `tom`, `fri`), `{deadline}`, `every mon`, `for 1h30m`. Unknown projects and sections are created. Click a highlighted chip to turn it back into plain text. Projects, subprojects, sections, priorities and labels autocomplete by prefix as you type (`#sch` offers School, Schedules): ↑/↓ to choose, Tab to pick. The `?` button lists all shortcuts.
 - Inbox, Today (with Overdue), Projects with custom-named sections and one level of subprojects.
 - Subtasks (one level) with every task field.
 - Task timer: play/pause, auto-stop on complete, editable h:mm:ss, one running at a time.
-- Calendar: 3/4/5-day view (opens on 3), drag to reschedule, click a slot to add.
+- Calendar: 3/4/5-day view (opens on 3), drag to reschedule, drag a task's bottom edge to change its duration (15-minute steps), click a slot to add.
 - Reminders: 10 minutes before every timed task by default (editable per task and in Settings); date-only tasks remind at 9:00 AM. Each reminder fires once.
 - Stats: completed today/this week/this month against your goals (5 a day, 30 a week by default), streak, a 28-day chart, and completions and tracked time by project.
 - Google Calendar events (Mac app): read-only, from every calendar you have turned on, shown in the Calendar view with a hide/show checkbox. Setup: [docs/google-calendar-setup.md](docs/google-calendar-setup.md).
@@ -43,7 +43,7 @@ npm run app:build   # builds Todojam.app and a .dmg in src-tauri/target/release/
 ## Layout
 
 - `src/model/` data types, pure state transitions (`db.ts`), storage
-- `src/parser/quickAdd.ts` natural-language parser
+- `src/parser/quickAdd.ts` natural-language parser, `src/parser/autocomplete.ts` quick-add suggestions
 - `src/ui/` views and components
 - `src/calendar/`, `src/reminders/` calendar layout and reminder scheduling
 - `src/stats/`, `src/google/` stats and Google Calendar events
