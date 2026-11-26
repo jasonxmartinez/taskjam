@@ -8,6 +8,7 @@ export interface QuickAddDefaults {
   projectId?: string;
   sectionId?: string | null;
   dueDate?: string;
+  dueTime?: string;
 }
 
 const CHIP: Record<TokenType, string> = {
@@ -55,6 +56,7 @@ export function QuickAdd({ defaults, onClose }: { defaults: QuickAddDefaults; on
         projectId,
         sectionId,
         dueDate: fields.dueDate ?? defaults.dueDate ?? null,
+        dueTime: fields.dueDate ? fields.dueTime : (defaults.dueTime ?? null),
       }).state;
     });
     if (err) return setError(err);

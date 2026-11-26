@@ -2,16 +2,18 @@ import { useEffect, useState } from "react";
 import { addProject, inboxTasks, localDate, projectTree, todayTasks } from "./model/db";
 import { INBOX_ID } from "./model/types";
 import { useStore } from "./store";
-import { QuickAdd } from "./ui/QuickAdd";
+import { CalendarView } from "./ui/CalendarView";
+import { QuickAdd, type QuickAddDefaults } from "./ui/QuickAdd";
 import { TaskDetail } from "./ui/TaskDetail";
 import { InboxView, ProjectView, TodayView } from "./ui/Views";
 
-type View = { kind: "inbox" } | { kind: "today" } | { kind: "project"; id: string };
+type View = { kind: "inbox" } | { kind: "today" } | { kind: "calendar" } | { kind: "project"; id: string };
 
 export function App() {
   const { state, apply } = useStore();
   const [view, setView] = useState<View>({ kind: "inbox" });
   const [quick, setQuick] = useState(false);
+  const [quickDefaults, setQuickDefaults] = useState<QuickAddDefaults | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [newProject, setNewProject] = useState<{ parentId: string | null } | null>(null);
   const [name, setName] = useState("");
@@ -24,6 +26,7 @@ export function App() {
       if (el.closest("input, textarea, select, [contenteditable]") || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key.toLowerCase() === "q") {
         e.preventDefault();
+        setQuickDefaults(null);
         setQuick(true);
       }
     };
@@ -38,17 +41,19 @@ export function App() {
   const item = (active: boolean) =>
     `flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm ${active ? "bg-slate-200 dark:bg-slate-800" : "hover:bg-slate-100 dark:hover:bg-slate-900"}`;
 
-  const defaults =
+  const defaults: QuickAddDefaults =
     view.kind === "project"
       ? { projectId: view.id }
       : view.kind === "today"
         ? { dueDate: today }
-        : { projectId: INBOX_ID };
+        : view.kind === "calendar"
+          ? { dueDate: today }
+          : { projectId: INBOX_ID };
 
   return (
     <div className="flex h-screen">
       <aside className="w-64 shrink-0 space-y-1 overflow-y-auto border-r border-slate-200 p-3 dark:border-slate-800">
-        <button className="mb-3 w-full rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white" onClick={() => setQuick(true)}>
+        <button className="mb-3 w-full rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white" onClick={() => { setQuickDefaults(null); setQuick(true); }}>
           + Add task <kbd className="ml-1 opacity-70">Q</kbd>
         </button>
         <button className={item(view.kind === "inbox")} onClick={() => setView({ kind: "inbox" })}>
@@ -57,8 +62,8 @@ export function App() {
         <button className={item(view.kind === "today")} onClick={() => setView({ kind: "today" })}>
           Today <span className="text-xs text-slate-500">{counts.today || ""}</span>
         </button>
-        <button className={`${item(false)} cursor-not-allowed text-slate-400`} disabled>
-          Calendar <span className="text-xs">soon</span>
+        <button className={item(view.kind === "calendar")} onClick={() => setView({ kind: "calendar" })}>
+          Calendar
         </button>
         <div className="flex items-center justify-between px-2 pt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
           Projects
@@ -98,14 +103,23 @@ export function App() {
         )}
         {error && <div className="px-2 text-xs text-red-600">{error}</div>}
       </aside>
-      <main className="flex-1 overflow-y-auto p-8">
-        <div className="mx-auto max-w-3xl">
+      <main className={`flex-1 ${view.kind === "calendar" ? "overflow-hidden p-6" : "overflow-y-auto p-8"}`}>
+        <div className={view.kind === "calendar" ? "h-full" : "mx-auto max-w-3xl"}>
           {view.kind === "inbox" && <InboxView onOpen={setOpen} />}
           {view.kind === "today" && <TodayView onOpen={setOpen} />}
+          {view.kind === "calendar" && (
+            <CalendarView
+              onOpen={setOpen}
+              onQuickAdd={(d) => {
+                setQuickDefaults(d);
+                setQuick(true);
+              }}
+            />
+          )}
           {view.kind === "project" && <ProjectView projectId={view.id} onOpen={setOpen} />}
         </div>
       </main>
-      {quick && <QuickAdd defaults={defaults} onClose={() => setQuick(false)} />}
+      {quick && <QuickAdd defaults={quickDefaults ?? defaults} onClose={() => { setQuick(false); setQuickDefaults(null); }} />}
       {open && <TaskDetail id={open} onClose={() => setOpen(null)} />}
     </div>
   );
