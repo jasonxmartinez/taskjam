@@ -4,6 +4,7 @@ import { setTrayTitle } from "./platform";
 import { useReminders } from "./reminders/useReminders";
 import { loadSettings, saveSettings, type Settings } from "./settings";
 import { SettingsDialog } from "./ui/Settings";
+import { StatsView } from "./ui/StatsView";
 import { INBOX_ID } from "./model/types";
 import { useStore } from "./store";
 import { CalendarView } from "./ui/CalendarView";
@@ -11,7 +12,7 @@ import { QuickAdd, type QuickAddDefaults } from "./ui/QuickAdd";
 import { TaskDetail } from "./ui/TaskDetail";
 import { InboxView, ProjectView, TodayView } from "./ui/Views";
 
-type View = { kind: "inbox" } | { kind: "today" } | { kind: "calendar" } | { kind: "project"; id: string };
+type View = { kind: "inbox" } | { kind: "today" } | { kind: "calendar" } | { kind: "stats" } | { kind: "project"; id: string };
 
 export function App() {
   const { state, apply } = useStore();
@@ -24,6 +25,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
+  const [, setGoogleVersion] = useState(0);
   const updateSettings = (next: Settings) => {
     setSettings(next);
     saveSettings(next);
@@ -89,6 +91,9 @@ export function App() {
         <button className={item(view.kind === "calendar")} onClick={() => setView({ kind: "calendar" })}>
           Calendar
         </button>
+        <button className={item(view.kind === "stats")} onClick={() => setView({ kind: "stats" })}>
+          Stats
+        </button>
         <div className="flex items-center justify-between px-2 pt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
           Projects
           <button title="New project" onClick={() => setNewProject({ parentId: null })}>＋</button>
@@ -141,11 +146,12 @@ export function App() {
               }}
             />
           )}
+          {view.kind === "stats" && <StatsView settings={settings} />}
           {view.kind === "project" && <ProjectView projectId={view.id} onOpen={setOpen} />}
         </div>
       </main>
       {quick && <QuickAdd defaults={quickDefaults ?? defaults} onClose={() => { setQuick(false); setQuickDefaults(null); }} />}
-      {showSettings && <SettingsDialog settings={settings} onChange={updateSettings} onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsDialog settings={settings} onChange={updateSettings} onClose={() => setShowSettings(false)} onGoogleChange={() => setGoogleVersion((v) => v + 1)} />}
       {open && <TaskDetail id={open} onClose={() => setOpen(null)} />}
     </div>
   );

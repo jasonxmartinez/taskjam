@@ -1,3 +1,5 @@
+mod google;
+
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 #[cfg(target_os = "macos")]
@@ -74,7 +76,7 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![set_tray_title, hide_quick_add])
+        .invoke_handler(tauri::generate_handler![set_tray_title, hide_quick_add, google::google_connect, google::google_fetch_events])
         .setup(move |app| {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             app.global_shortcut().register(shortcut)?;

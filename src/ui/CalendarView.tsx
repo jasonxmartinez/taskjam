@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { addDays, dayRange, HOUR_PX, layoutTimed, minutesToTime, snapMinutes } from "../calendar/layout";
+import { addDays, dayRange, DEFAULT_BLOCK_MIN, HOUR_PX, layoutBlocks, minutesToTime, snapMinutes, timeToMinutes } from "../calendar/layout";
+import { eventsForDay, type CalEvent } from "../google/events";
+import { useGoogleEvents } from "../google/useGoogleEvents";
 import { localDate, updateTask } from "../model/db";
 import type { Task } from "../model/types";
 import { useStore } from "../store";
@@ -13,6 +15,21 @@ const PRIORITY_BG: Record<number, string> = {
   4: "bg-indigo-100 border-indigo-500 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-100",
 };
 
+function EventChip({ event: e }: { event: CalEvent }) {
+  return (
+    <a
+      href={e.link ?? undefined}
+      target="_blank"
+      rel="noreferrer"
+      title={`${e.title} (${e.calendarName})`}
+      className="block truncate rounded border-l-4 px-1.5 py-0.5 text-xs text-slate-800 dark:text-slate-100"
+      style={{ borderColor: e.color, backgroundColor: e.color + "33" }}
+    >
+      {e.title}
+    </a>
+  );
+}
+
 const hourLabel = (h: number) => (h === 0 ? "" : new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: "numeric" }));
 
 export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => void; onQuickAdd: (d: QuickAddDefaults) => void }) {
@@ -22,6 +39,22 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
   const today = localDate(new Date());
   const [start, setStart] = useState(today);
   const days = dayRange(start, span);
+  const [showEvents, setShowEvents] = useState(() => {
+    try {
+      return localStorage.getItem("todojam.showGoogleEvents") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const google = useGoogleEvents(days, showEvents);
+  const toggleEvents = (on: boolean) => {
+    setShowEvents(on);
+    try {
+      localStorage.setItem("todojam.showGoogleEvents", on ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  };
   const scroller = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -57,6 +90,13 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
         <button className="rounded border border-slate-300 px-2 py-1 text-sm dark:border-slate-700" onClick={() => setStart(addDays(start, -1))} aria-label="Previous day">←</button>
         <button className="rounded border border-slate-300 px-2 py-1 text-sm dark:border-slate-700" onClick={() => setStart(today)}>Today</button>
         <button className="rounded border border-slate-300 px-2 py-1 text-sm dark:border-slate-700" onClick={() => setStart(addDays(start, 1))} aria-label="Next day">→</button>
+        {google.connected && (
+          <label className="ml-4 flex items-center gap-1.5 text-sm">
+            <input type="checkbox" checked={showEvents} onChange={(e) => toggleEvents(e.target.checked)} />
+            Google events
+            {google.loading && <span className="text-xs text-slate-500">…</span>}
+          </label>
+        )}
         <div className="ml-auto inline-flex overflow-hidden rounded border border-slate-300 text-sm dark:border-slate-700" role="group" aria-label="Days shown">
           {([3, 4, 5] as const).map((n) => (
             <button
@@ -71,6 +111,11 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
         </div>
       </div>
 
+      {google.error && (
+        <div className="mb-2 rounded bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          Google Calendar: {google.error}
+        </div>
+      )}
       <div className="grid border-b border-slate-200 dark:border-slate-800" style={cols}>
         <div />
         {days.map((d) => {
@@ -97,6 +142,9 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
               if (id) move(id, d, null);
             }}
           >
+            {eventsForDay(google.events, d).allDay.map((e) => (
+              <EventChip key={e.id} event={e} />
+            ))}
             {open.filter((t) => t.dueDate === d && !t.dueTime).map((t) => (
               <button
                 key={t.id}
@@ -133,7 +181,20 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
             ))}
           </div>
           {days.map((d) => {
-            const placed = layoutTimed(open.filter((t) => t.dueDate === d));
+            type Item = { kind: "task"; task: Task } | { kind: "event"; event: CalEvent; startMin: number; endMin: number };
+            const items: Item[] = [
+              ...open
+                .filter((t) => t.dueDate === d && t.dueTime)
+                .map((task): Item => ({ kind: "task", task })),
+              ...eventsForDay(google.events, d).timed.map((x): Item => ({ kind: "event", event: x.event, startMin: x.startMin, endMin: x.endMin })),
+            ];
+            const placed = layoutBlocks<Item>(
+              items.map((item): { item: Item; top: number; height: number } =>
+                item.kind === "task"
+                  ? { item, top: timeToMinutes(item.task.dueTime!), height: Math.max(item.task.durationMin ?? DEFAULT_BLOCK_MIN, 20) }
+                  : { item, top: item.startMin, height: Math.max(item.endMin - item.startMin, 20) },
+              ),
+            );
             return (
               <div
                 key={d}
@@ -155,27 +216,48 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
                 {HOURS.map((h) => (
                   <div key={h} data-slot="1" className="border-t border-slate-100 dark:border-slate-900" style={{ height: HOUR_PX }} />
                 ))}
-                {placed.map((p) => (
-                  <button
-                    key={p.task.id}
-                    draggable
-                    onDragStart={(e) => onDragStart(e, p.task)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpen(p.task.id);
-                    }}
-                    className={`absolute overflow-hidden rounded border-l-4 px-1.5 py-0.5 text-left text-xs ${PRIORITY_BG[p.task.priority]}`}
-                    style={{
-                      top: (p.top / 60) * HOUR_PX,
-                      height: (p.height / 60) * HOUR_PX - 1,
-                      left: `${(p.lane / p.lanes) * 100}%`,
-                      width: `calc(${100 / p.lanes}% - 2px)`,
-                    }}
-                  >
-                    <div className="truncate font-medium">{p.task.title}</div>
-                    <div className="opacity-70">{p.task.dueTime}</div>
-                  </button>
-                ))}
+                {placed.map((p) => {
+                  const pos = {
+                    top: (p.top / 60) * HOUR_PX,
+                    height: (p.height / 60) * HOUR_PX - 1,
+                    left: `${(p.lane / p.lanes) * 100}%`,
+                    width: `calc(${100 / p.lanes}% - 2px)`,
+                  };
+                  if (p.item.kind === "event") {
+                    const e = p.item.event;
+                    return (
+                      <a
+                        key={e.id + d}
+                        href={e.link ?? undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`${e.title} (${e.calendarName})`}
+                        onClick={(ev) => ev.stopPropagation()}
+                        className="absolute block overflow-hidden rounded border-l-4 px-1.5 py-0.5 text-xs text-slate-800 dark:text-slate-100"
+                        style={{ ...pos, borderColor: e.color, backgroundColor: e.color + "33" }}
+                      >
+                        <div className="truncate font-medium">{e.title}</div>
+                      </a>
+                    );
+                  }
+                  const task = p.item.task;
+                  return (
+                    <button
+                      key={task.id}
+                      draggable
+                      onDragStart={(ev) => onDragStart(ev, task)}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        onOpen(task.id);
+                      }}
+                      className={`absolute overflow-hidden rounded border-l-4 px-1.5 py-0.5 text-left text-xs ${PRIORITY_BG[task.priority]}`}
+                      style={pos}
+                    >
+                      <div className="truncate font-medium">{task.title}</div>
+                      <div className="opacity-70">{task.dueTime}</div>
+                    </button>
+                  );
+                })}
                 {d === today && (
                   <div className="pointer-events-none absolute left-0 right-0 border-t-2 border-red-500" style={{ top: (nowMin / 60) * HOUR_PX }} />
                 )}

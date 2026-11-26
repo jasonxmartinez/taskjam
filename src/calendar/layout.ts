@@ -31,27 +31,25 @@ export function snapMinutes(y: number): number {
   return Math.max(0, Math.min(24 * 60 - SNAP_MIN, snapped));
 }
 
-export interface Placed {
-  task: Task;
+export interface Block<T> {
+  item: T;
   top: number; // minutes from midnight
   height: number; // minutes
+}
+
+export interface Lane<T> extends Block<T> {
   lane: number;
   lanes: number; // lanes in this overlap group
 }
 
-/** Lays out timed tasks side by side when they overlap. */
-export function layoutTimed(tasks: Task[]): Placed[] {
-  const items = tasks
-    .filter((t) => t.dueTime)
-    .map((task) => {
-      const top = timeToMinutes(task.dueTime!);
-      const height = Math.max(task.durationMin ?? DEFAULT_BLOCK_MIN, 20);
-      return { task, top, height, end: Math.min(top + height, 24 * 60) };
-    })
-    .sort((a, b) => a.top - b.top || b.end - a.end);
+/** Lays out blocks side by side when they overlap. */
+export function layoutBlocks<T>(blocks: Block<T>[]): Lane<T>[] {
+  const items = blocks
+    .map((b) => ({ b, end: Math.min(b.top + b.height, 24 * 60) }))
+    .sort((x, y) => x.b.top - y.b.top || y.end - x.end);
 
-  const placed: Placed[] = [];
-  let group: { p: Placed; end: number }[] = [];
+  const placed: Lane<T>[] = [];
+  let group: { p: Lane<T>; end: number }[] = [];
   let groupEnd = -1;
   const flush = () => {
     const lanes = Math.max(1, ...group.map((g) => g.p.lane + 1));
@@ -60,18 +58,35 @@ export function layoutTimed(tasks: Task[]): Placed[] {
   };
 
   for (const it of items) {
-    if (it.top >= groupEnd) {
+    if (it.b.top >= groupEnd) {
       flush();
       groupEnd = -1;
     }
-    const used = new Set(group.filter((g) => g.end > it.top).map((g) => g.p.lane));
+    const used = new Set(group.filter((g) => g.end > it.b.top).map((g) => g.p.lane));
     let lane = 0;
     while (used.has(lane)) lane++;
-    const p: Placed = { task: it.task, top: it.top, height: it.height, lane, lanes: 1 };
+    const p: Lane<T> = { ...it.b, lane, lanes: 1 };
     placed.push(p);
     group.push({ p, end: it.end });
     groupEnd = Math.max(groupEnd, it.end);
   }
   flush();
   return placed;
+}
+
+export interface Placed {
+  task: Task;
+  top: number;
+  height: number;
+  lane: number;
+  lanes: number;
+}
+
+/** Tasks with a due time, as blocks (30 minutes unless a duration is set). */
+export function layoutTimed(tasks: Task[]): Placed[] {
+  return layoutBlocks(
+    tasks
+      .filter((t) => t.dueTime)
+      .map((task) => ({ item: task, top: timeToMinutes(task.dueTime!), height: Math.max(task.durationMin ?? DEFAULT_BLOCK_MIN, 20) })),
+  ).map(({ item, ...rest }) => ({ task: item, ...rest }));
 }

@@ -2,7 +2,7 @@
 
 A personal, Todoist-style task manager. Local-first, no subscription.
 
-**Status:** runs in the browser and as a Mac app. Todoist import, Google Calendar events and stats come in later PRs.
+**Status:** runs in the browser and as a Mac app. Todoist import is not built yet.
 
 ## What works now
 
@@ -12,6 +12,8 @@ A personal, Todoist-style task manager. Local-first, no subscription.
 - Task timer: play/pause, auto-stop on complete, editable h:mm:ss, one running at a time.
 - Calendar: 3/4/5-day view (opens on 3), drag to reschedule, click a slot to add.
 - Reminders: 10 minutes before every timed task by default (editable per task and in Settings); date-only tasks remind at 9:00 AM. Each reminder fires once.
+- Stats: completed today/this week/this month against your goals (5 a day, 30 a week by default), streak, a 28-day chart, and completions and tracked time by project.
+- Google Calendar events (Mac app): read-only, from every calendar you have turned on, shown in the Calendar view with a hide/show checkbox. Setup: [docs/google-calendar-setup.md](docs/google-calendar-setup.md).
 - Data is saved in local storage for now (the WebView's, in the Mac app).
 
 ## Run it
@@ -44,4 +46,5 @@ npm run app:build   # builds Todojam.app and a .dmg in src-tauri/target/release/
 - `src/parser/quickAdd.ts` natural-language parser
 - `src/ui/` views and components
 - `src/calendar/`, `src/reminders/` calendar layout and reminder scheduling
-- `src-tauri/` Mac app shell (Rust)
+- `src/stats/`, `src/google/` stats and Google Calendar events
+- `src-tauri/` Mac app shell (Rust), including `src/google.rs` for Google sign-in and fetching
