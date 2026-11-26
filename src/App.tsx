@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { addProject, inboxTasks, localDate, projectTree, todayTasks } from "./model/db";
+import { addProject, elapsedSec, formatHMS, inboxTasks, localDate, projectTree, todayTasks } from "./model/db";
+import { setTrayTitle } from "./platform";
+import { useReminders } from "./reminders/useReminders";
+import { loadSettings, saveSettings, type Settings } from "./settings";
+import { SettingsDialog } from "./ui/Settings";
 import { INBOX_ID } from "./model/types";
 import { useStore } from "./store";
 import { CalendarView } from "./ui/CalendarView";
@@ -18,6 +22,26 @@ export function App() {
   const [newProject, setNewProject] = useState<{ parentId: string | null } | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [showSettings, setShowSettings] = useState(false);
+  const updateSettings = (next: Settings) => {
+    setSettings(next);
+    saveSettings(next);
+  };
+  useReminders(state, settings, setOpen);
+
+  // Show the running timer in the Mac menu bar.
+  useEffect(() => {
+    const running = state.tasks.find((t) => t.timerStartedAt);
+    if (!running) {
+      void setTrayTitle("");
+      return;
+    }
+    const tick = () => void setTrayTitle(`${formatHMS(elapsedSec(running))}`);
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [state.tasks]);
 
   // Q opens quick add anywhere (unless typing in a field).
   useEffect(() => {
@@ -102,6 +126,7 @@ export function App() {
           />
         )}
         {error && <div className="px-2 text-xs text-red-600">{error}</div>}
+        <button className="mt-4 w-full px-2 py-1 text-left text-xs text-slate-500" onClick={() => setShowSettings(true)}>⚙ Settings</button>
       </aside>
       <main className={`flex-1 ${view.kind === "calendar" ? "overflow-hidden p-6" : "overflow-y-auto p-8"}`}>
         <div className={view.kind === "calendar" ? "h-full" : "mx-auto max-w-3xl"}>
@@ -120,6 +145,7 @@ export function App() {
         </div>
       </main>
       {quick && <QuickAdd defaults={quickDefaults ?? defaults} onClose={() => { setQuick(false); setQuickDefaults(null); }} />}
+      {showSettings && <SettingsDialog settings={settings} onChange={updateSettings} onClose={() => setShowSettings(false)} />}
       {open && <TaskDetail id={open} onClose={() => setOpen(null)} />}
     </div>
   );

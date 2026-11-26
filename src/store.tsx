@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { loadState, saveState } from "./model/storage";
+import { loadState, saveState, STATE_KEY } from "./model/storage";
 import type { AppState } from "./model/types";
 
 interface Store {
@@ -15,6 +15,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => saveState(state), [state]);
 
   const ref = useRef(state);
+  // Another window (e.g. the global quick-add window) saved a change: pick it up.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== STATE_KEY) return;
+      const next = loadState();
+      ref.current = next;
+      setState(next);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
   const apply = useCallback((fn: (s: AppState) => AppState) => {
     try {
       const next = fn(ref.current);

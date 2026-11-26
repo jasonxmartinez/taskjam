@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { addProject, addSection, addTask } from "../model/db";
 import { INBOX_ID, type AppState } from "../model/types";
 import { parseQuickAdd, toNewTask, type TokenType } from "../parser/quickAdd";
+import { loadSettings } from "../settings";
 import { useStore } from "../store";
 
 export interface QuickAddDefaults {
@@ -22,7 +23,7 @@ const CHIP: Record<TokenType, string> = {
   duration: "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200",
 };
 
-export function QuickAdd({ defaults, onClose }: { defaults: QuickAddDefaults; onClose: () => void }) {
+export function QuickAdd({ defaults, onClose, variant = "modal", closeOnSave = false }: { defaults: QuickAddDefaults; onClose: () => void; variant?: "modal" | "window"; closeOnSave?: boolean }) {
   const { state, apply } = useStore();
   const [text, setText] = useState("");
   const [off, setOff] = useState<Set<TokenType>>(new Set());
@@ -57,6 +58,7 @@ export function QuickAdd({ defaults, onClose }: { defaults: QuickAddDefaults; on
         sectionId,
         dueDate: fields.dueDate ?? defaults.dueDate ?? null,
         dueTime: fields.dueDate ? fields.dueTime : (defaults.dueTime ?? null),
+        reminders: [...loadSettings().defaultReminders],
       }).state;
     });
     if (err) return setError(err);
@@ -66,11 +68,12 @@ export function QuickAdd({ defaults, onClose }: { defaults: QuickAddDefaults; on
     setOff(new Set());
     setError(null);
     setTimeout(() => setToast(null), 3000);
+    if (closeOnSave) onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 pt-32" onClick={onClose}>
-      <div className="w-full max-w-xl rounded-lg bg-white p-4 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+    <div className={variant === "modal" ? "fixed inset-0 z-50 flex items-start justify-center bg-black/30 pt-32" : "h-screen"} onClick={variant === "modal" ? onClose : undefined}>
+      <div className={variant === "modal" ? "w-full max-w-xl rounded-lg bg-white p-4 shadow-xl dark:bg-slate-900" : "h-full bg-white p-4 dark:bg-slate-900"} onClick={(e) => e.stopPropagation()}>
         <input
           ref={ref}
           value={text}

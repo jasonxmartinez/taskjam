@@ -89,6 +89,31 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
           </label>
         </div>
 
+        <div className="mb-4 text-sm">
+          <div className="mb-1 font-medium">Reminders</div>
+          <div className="flex flex-wrap items-center gap-2">
+            {task.reminders.map((m) => (
+              <span key={m} className="rounded bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-800">
+                {m === 0 ? "At due time" : `${m} min before`}
+                <button className="ml-1 text-slate-500" aria-label="Remove reminder" onClick={() => apply((s) => updateTask(s, task.id, { reminders: task.reminders.filter((x) => x !== m) }))}>✕</button>
+              </span>
+            ))}
+            <input
+              placeholder="+ minutes"
+              className="w-24 rounded border border-slate-300 bg-transparent p-1 text-xs dark:border-slate-700"
+              onKeyDown={(e) => {
+                const n = Number((e.target as HTMLInputElement).value);
+                if (e.key === "Enter" && Number.isFinite(n) && n >= 0 && !task.reminders.includes(n)) {
+                  apply((s) => updateTask(s, task.id, { reminders: [...task.reminders, n].sort((a, b) => b - a) }));
+                  (e.target as HTMLInputElement).value = "";
+                }
+              }}
+            />
+          </div>
+          {!task.dueDate && <div className="mt-1 text-xs text-slate-500">Set a due date for reminders to fire.</div>}
+          {task.dueDate && !task.dueTime && <div className="mt-1 text-xs text-slate-500">No time set: one reminder at the date-only time in Settings.</div>}
+        </div>
+
         <div className="mb-5 rounded border border-slate-200 p-3 dark:border-slate-800">
           <div className="mb-2 text-sm font-medium">Timer</div>
           <div className="flex items-center gap-3">

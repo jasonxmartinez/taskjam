@@ -1,7 +1,8 @@
 import { emptyState } from "./db";
 import type { AppState } from "./types";
 
-const KEY = "todojam.state.v1";
+export const STATE_KEY = "todojam.state.v1";
+const KEY = STATE_KEY;
 
 /** Browser storage for now; a SQLite adapter replaces this when the Tauri shell lands. */
 export function loadState(): AppState {
