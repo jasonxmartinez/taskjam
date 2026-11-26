@@ -1,4 +1,5 @@
 import {
+  DEFAULT_PROJECT_COLOR,
   DEFAULT_REMINDERS,
   INBOX_ID,
   type AppState,
@@ -43,12 +44,56 @@ export function addProject(
   const project: Project = {
     id: newId(),
     name,
-    color: input.color ?? "#6366f1",
+    color: input.color ?? DEFAULT_PROJECT_COLOR,
     parentId,
     order: siblings.length,
     archived: false,
   };
   return { state: { ...s, projects: [...s.projects, project] }, project };
+}
+
+export function renameProject(s: AppState, id: string, name: string): AppState {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Project name is required");
+  if (id === INBOX_ID) throw new Error("Inbox cannot be renamed");
+  if (!byId(s.projects, id)) throw new Error("Project not found");
+  return { ...s, projects: s.projects.map((p) => (p.id === id ? { ...p, name: trimmed } : p)) };
+}
+
+export function setProjectColor(s: AppState, id: string, color: string): AppState {
+  if (!byId(s.projects, id)) throw new Error("Project not found");
+  return { ...s, projects: s.projects.map((p) => (p.id === id ? { ...p, color } : p)) };
+}
+
+/** Whether `id` may be dropped under `parentId` (one level of nesting only). */
+export function canNestProject(s: AppState, id: string, parentId: string | null): boolean {
+  if (!parentId) return id !== INBOX_ID;
+  if (id === INBOX_ID || id === parentId || parentId === INBOX_ID) return false;
+  const parent = byId(s.projects, parentId);
+  if (!parent || parent.parentId) return false;
+  // A project that has its own subprojects cannot become a subproject.
+  return !s.projects.some((p) => p.parentId === id && !p.archived);
+}
+
+/**
+ * Moves a project to `index` among the live children of `parentId` (null = top level),
+ * renumbering both the old and the new sibling lists.
+ */
+export function placeProject(s: AppState, id: string, to: { parentId: string | null; index: number }): AppState {
+  const project = byId(s.projects, id);
+  if (!project) throw new Error("Project not found");
+  if (!canNestProject(s, id, to.parentId)) throw new Error("Projects can only be nested one level deep");
+  const siblings = (parentId: string | null) =>
+    s.projects
+      .filter((p) => p.parentId === parentId && p.id !== id && p.id !== INBOX_ID && !p.archived)
+      .sort((a, b) => a.order - b.order);
+  const target = siblings(to.parentId);
+  const index = Math.max(0, Math.min(to.index, target.length));
+  target.splice(index, 0, { ...project, parentId: to.parentId });
+  const order = new Map<string, { order: number; parentId: string | null }>();
+  target.forEach((p, i) => order.set(p.id, { order: i, parentId: to.parentId }));
+  if (project.parentId !== to.parentId) siblings(project.parentId).forEach((p, i) => order.set(p.id, { order: i, parentId: p.parentId }));
+  return { ...s, projects: s.projects.map((p) => (order.has(p.id) ? { ...p, ...order.get(p.id)! } : p)) };
 }
 
 // ---------- sections ----------
@@ -142,7 +187,10 @@ export function addTask(s: AppState, input: NewTask, now = Date.now()): { state:
     timerStartedAt: null,
     completedAt: null,
     createdAt: now,
-    order: s.tasks.filter((t) => t.projectId === projectId && t.parentId === parentId).length,
+    // New tasks go to the bottom of their list.
+    order: s.tasks
+      .filter((t) => t.projectId === projectId && t.parentId === parentId)
+      .reduce((max, t) => Math.max(max, t.order + 1), 0),
   };
   const next = ensureLabels({ ...s, tasks: [...s.tasks, task] }, labels);
   return { state: next, task };
@@ -173,6 +221,29 @@ export function moveTask(
       t.id === id || t.parentId === id ? { ...t, projectId: to.projectId, sectionId } : t,
     ),
   };
+}
+
+/**
+ * Drag and drop in a project view: puts a top-level task at `index` among the open
+ * top-level tasks of `projectId` + `sectionId`, moving it (and its subtasks) there if needed.
+ */
+export function placeTask(
+  s: AppState,
+  id: string,
+  to: { projectId: string; sectionId: string | null; index: number },
+): AppState {
+  const task = byId(s.tasks, id);
+  if (!task) throw new Error("Task not found");
+  if (task.parentId) throw new Error("Subtasks move with their parent");
+  let next = task.projectId === to.projectId && task.sectionId === to.sectionId ? s : moveTask(s, id, to);
+  const moved = byId(next.tasks, id)!;
+  const list = next.tasks
+    .filter((t) => !t.completedAt && !t.parentId && t.projectId === to.projectId && t.sectionId === to.sectionId && t.id !== id)
+    .sort((a, b) => a.order - b.order);
+  list.splice(Math.max(0, Math.min(to.index, list.length)), 0, moved);
+  const order = new Map(list.map((t, i) => [t.id, i]));
+  next = { ...next, tasks: next.tasks.map((t) => (order.has(t.id) ? { ...t, order: order.get(t.id)! } : t)) };
+  return next;
 }
 
 // ---------- completion & timer ----------
@@ -285,8 +356,11 @@ export function projectTree(s: AppState): { project: Project; children: Project[
     }));
 }
 
+/** Project views use the manual (drag and drop) order. */
 export function projectTasks(s: AppState, projectId: string) {
-  const tasks = s.tasks.filter((t) => open(t) && !t.parentId && t.projectId === projectId).sort(sortTasks);
+  const tasks = s.tasks
+    .filter((t) => open(t) && !t.parentId && t.projectId === projectId)
+    .sort((a, b) => a.order - b.order || a.createdAt - b.createdAt);
   const sections = s.sections.filter((x) => x.projectId === projectId).sort((a, b) => a.order - b.order);
   return {
     unsectioned: tasks.filter((t) => !t.sectionId),

@@ -152,12 +152,20 @@ export function parseQuickAdd(input: string, state: AppState, opts: ParseOptions
     }
   }
 
-  // 6. duration: "for 30m", "for 1h", "for 1h30m"
+  // 6. duration: "15m", "1h", "1h30m", "1.5h", "45 min", "for 2 hours", "for 1hr".
+  //    "in 30m" is left alone so it can still mean a due time.
   if (!off.has("duration")) {
-    const m = /(?<=^|\s)for\s+(?:(\d+)h)?(?:(\d+)m)?(?=\s|$)/i.exec(input);
-    if (m && (m[1] || m[2]) && !overlaps({ start: m.index, end: m.index + m[0].length })) {
-      result.durationMin = Number(m[1] ?? 0) * 60 + Number(m[2] ?? 0);
-      claim("duration", m.index, m.index + m[0].length);
+    const H = String.raw`(\d+(?:\.\d+)?)\s?(?:hours?|hrs?|h)`;
+    const M = String.raw`(\d+)\s?(?:minutes?|mins?|m)`;
+    const re = new RegExp(String.raw`(?<=^|\s)(?<!\bin\s)(?:for\s+)?(?:${H}(?:\s?${M})?|${M})(?=\s|$)`, "gi");
+    for (const m of input.matchAll(re)) {
+      const span = { start: m.index!, end: m.index! + m[0].length };
+      if (overlaps(span)) continue;
+      const min = Math.round(Number(m[1] ?? 0) * 60) + Number(m[2] ?? m[3] ?? 0);
+      if (min <= 0) continue;
+      result.durationMin = min;
+      claim("duration", span.start, span.end);
+      break;
     }
   }
 

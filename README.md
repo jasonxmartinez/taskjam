@@ -6,7 +6,7 @@ A personal, Todoist-style task manager. Local-first, no subscription.
 
 ## What works now
 
-- Quick add (press `Q`): `#Project`, `#Parent/Sub` (or `#"Name with spaces"`), `/Section`, `p1`-`p4`, `@label`, natural dates and times (`tue 7pm`, `tom`, `fri`), `{deadline}`, `every mon`, `for 1h30m`. Unknown projects and sections are created. Click a highlighted chip to turn it back into plain text. Projects, subprojects, sections, priorities and labels autocomplete by prefix as you type (`#sch` offers School, Schedules): ↑/↓ to choose, Tab to pick. The `?` button lists all shortcuts.
+- Quick add (press `Q`): `#Project`, `#Parent/Sub` (or `#"Name with spaces"`), `/Section`, `p1`-`p4`, `@label`, natural dates and times (`tue 7pm`, `tom`, `fri`), `{deadline}`, `every mon`, durations (`30m`, `1h30m`, `for 2 hours`). Unknown projects and sections are created. Click a highlighted chip to turn it back into plain text. Projects, subprojects, sections, priorities and labels autocomplete by prefix as you type (`#sch` offers School, Schedules): ↑/↓ to choose, Tab to pick. The `?` button lists all shortcuts.
 - Inbox, Today (with Overdue), Projects with custom-named sections and one level of subprojects.
 - Subtasks (one level) with every task field.
 - Task timer: play/pause, auto-stop on complete, editable h:mm:ss, one running at a time.

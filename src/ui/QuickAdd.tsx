@@ -32,7 +32,7 @@ const HELP: [string, string][] = [
   ["tomorrow 3pm, fri, next mon", "Due date"],
   ["{fri}", "Deadline"],
   ["every mon", "Repeat"],
-  ["for 45m, for 1h30m", "Duration"],
+  ["30m, 1h30m, 1.5h, for 2 hours", "Duration"],
 ];
 const KEYS: [string, string][] = [
   ["↑ ↓", "Move through suggestions"],

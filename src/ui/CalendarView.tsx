@@ -61,6 +61,17 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
     if (scroller.current) scroller.current.scrollTop = HOUR_PX * 7;
   }, []);
 
+  const [scrollbarW, setScrollbarW] = useState(0);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const measure = () => setScrollbarW(el.offsetWidth - el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000);
@@ -119,6 +130,9 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
   };
 
   const cols = { gridTemplateColumns: `3.5rem repeat(${span}, minmax(0, 1fr))` };
+  // The hour grid scrolls and may show a scrollbar; pad the rows above by the same
+  // width so the header, all-day row and hour grid share one set of column edges.
+  const gutter = { paddingRight: scrollbarW };
   const nowMin = now.getHours() * 60 + now.getMinutes();
 
   return (
@@ -154,7 +168,7 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
           Google Calendar: {google.error}
         </div>
       )}
-      <div className="grid border-b border-slate-200 dark:border-slate-800" style={cols}>
+      <div className="grid border-b border-slate-200 dark:border-slate-800" style={{ ...cols, ...gutter }}>
         <div />
         {days.map((d) => {
           const date = new Date(d + "T00:00:00");
@@ -168,7 +182,7 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
       </div>
 
       {/* Untimed tasks and deadlines */}
-      <div className="grid border-b border-slate-200 dark:border-slate-800" style={cols}>
+      <div className="grid border-b border-slate-200 dark:border-slate-800" style={{ ...cols, ...gutter }}>
         <div className="px-1 py-1 text-right text-[10px] text-slate-500">all day</div>
         {days.map((d) => (
           <div

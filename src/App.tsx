@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { addProject, elapsedSec, formatHMS, inboxTasks, localDate, projectTree, todayTasks } from "./model/db";
+import { elapsedSec, formatHMS, inboxTasks, localDate, placeTask, todayTasks } from "./model/db";
 import { setTrayTitle } from "./platform";
 import { useReminders } from "./reminders/useReminders";
 import { loadSettings, saveSettings, type Settings } from "./settings";
@@ -10,6 +10,7 @@ import { useStore } from "./store";
 import { CalendarView } from "./ui/CalendarView";
 import { QuickAdd, type QuickAddDefaults } from "./ui/QuickAdd";
 import { TaskDetail } from "./ui/TaskDetail";
+import { ProjectSidebar, TASK_MIME } from "./ui/ProjectSidebar";
 import { InboxView, ProjectView, TodayView } from "./ui/Views";
 
 type View = { kind: "inbox" } | { kind: "today" } | { kind: "calendar" } | { kind: "stats" } | { kind: "project"; id: string };
@@ -20,9 +21,7 @@ export function App() {
   const [quick, setQuick] = useState(false);
   const [quickDefaults, setQuickDefaults] = useState<QuickAddDefaults | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const [newProject, setNewProject] = useState<{ parentId: string | null } | null>(null);
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [inboxOver, setInboxOver] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [, setGoogleVersion] = useState(0);
@@ -62,7 +61,6 @@ export function App() {
 
   const today = localDate(new Date());
   const counts = { inbox: inboxTasks(state).length, today: (() => { const t = todayTasks(state, today); return t.overdue.length + t.today.length; })() };
-  const tree = projectTree(state);
 
   const item = (active: boolean) =>
     `flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm ${active ? "bg-slate-200 dark:bg-slate-800" : "hover:bg-slate-100 dark:hover:bg-slate-900"}`;
@@ -82,7 +80,21 @@ export function App() {
         <button className="mb-3 w-full rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white" onClick={() => { setQuickDefaults(null); setQuick(true); }}>
           + Add task <kbd className="ml-1 opacity-70">Q</kbd>
         </button>
-        <button className={item(view.kind === "inbox")} onClick={() => setView({ kind: "inbox" })}>
+        <button
+          className={`${item(view.kind === "inbox")} ${inboxOver ? "bg-accent-soft" : ""}`}
+          onClick={() => setView({ kind: "inbox" })}
+          onDragOver={(e) => {
+            if (!e.dataTransfer.types.includes(TASK_MIME)) return;
+            e.preventDefault();
+            setInboxOver(true);
+          }}
+          onDragLeave={() => setInboxOver(false)}
+          onDrop={(e) => {
+            setInboxOver(false);
+            const id = e.dataTransfer.getData(TASK_MIME);
+            if (id) apply((s) => placeTask(s, id, { projectId: INBOX_ID, sectionId: null, index: Number.MAX_SAFE_INTEGER }));
+          }}
+        >
           Inbox <span className="text-xs text-slate-500">{counts.inbox || ""}</span>
         </button>
         <button className={item(view.kind === "today")} onClick={() => setView({ kind: "today" })}>
@@ -94,43 +106,11 @@ export function App() {
         <button className={item(view.kind === "stats")} onClick={() => setView({ kind: "stats" })}>
           Stats
         </button>
-        <div className="flex items-center justify-between px-2 pt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Projects
-          <button title="New project" onClick={() => setNewProject({ parentId: null })}>＋</button>
-        </div>
-        {tree.map(({ project, children }) => (
-          <div key={project.id}>
-            <div className="group flex items-center">
-              <button className={item(view.kind === "project" && view.id === project.id)} onClick={() => setView({ kind: "project", id: project.id })}>
-                {project.name}
-              </button>
-              <button className="px-1 text-slate-400 opacity-0 group-hover:opacity-100" title="New subproject" onClick={() => setNewProject({ parentId: project.id })}>＋</button>
-            </div>
-            {children.map((c) => (
-              <button key={c.id} className={`${item(view.kind === "project" && view.id === c.id)} pl-6`} onClick={() => setView({ kind: "project", id: c.id })}>
-                {c.name}
-              </button>
-            ))}
-          </div>
-        ))}
-        {newProject && (
-          <input
-            autoFocus
-            value={name}
-            placeholder={newProject.parentId ? "Subproject name" : "Project name"}
-            className="mt-1 w-full rounded border border-slate-300 bg-transparent p-1 text-sm dark:border-slate-700"
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setNewProject(null);
-              if (e.key === "Enter" && name.trim()) {
-                setError(apply((s) => addProject(s, { name, parentId: newProject.parentId }).state));
-                setName("");
-                setNewProject(null);
-              }
-            }}
-          />
-        )}
-        {error && <div className="px-2 text-xs text-red-600">{error}</div>}
+        <ProjectSidebar
+          activeId={view.kind === "project" ? view.id : null}
+          onSelect={(id) => setView({ kind: "project", id })}
+          itemClass={item}
+        />
         <button className="mt-4 w-full px-2 py-1 text-left text-xs text-slate-500" onClick={() => setShowSettings(true)}>⚙ Settings</button>
       </aside>
       <main className={`flex-1 ${view.kind === "calendar" ? "overflow-hidden p-6" : "overflow-y-auto p-8"}`}>

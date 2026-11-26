@@ -63,3 +63,21 @@ export interface AppState {
 }
 
 export const DEFAULT_REMINDERS = [10];
+
+/** Project colors to pick from. Grey is the default when none is picked. */
+export const PROJECT_COLORS: { name: string; value: string }[] = [
+  { name: "Grey", value: "#94a3b8" },
+  { name: "Red", value: "#ef4444" },
+  { name: "Orange", value: "#f97316" },
+  { name: "Yellow", value: "#eab308" },
+  { name: "Green", value: "#22c55e" },
+  { name: "Teal", value: "#14b8a6" },
+  { name: "Blue", value: "#3b82f6" },
+  { name: "Indigo", value: "#6366f1" },
+  { name: "Purple", value: "#a855f7" },
+  { name: "Pink", value: "#ec4899" },
+  { name: "Brown", value: "#a16207" },
+];
+export const DEFAULT_PROJECT_COLOR = PROJECT_COLORS[0].value;
+/** The color every project got before colors could be picked. */
+export const LEGACY_DEFAULT_COLOR = "#6366f1";
