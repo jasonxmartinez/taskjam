@@ -1,34 +1,283 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter/index.css";
+@import "@fontsource/newsreader/300.css";
 
 /*
- * Design tokens. New UI uses these (bg-surface, text-ink-muted, border-line, ...)
- * so a later reskin only has to change the values here.
+ * Todojam design system (https://claude.ai/artifact/9gkCeZLBokGDak8rhCTkuu).
+ * Raw values live in CSS variables so Light, Dark and System can switch at runtime;
+ * Tailwind utilities (bg-surface, text-ink-muted, border-line, ...) point at them.
  */
-@theme {
-  --color-surface: #ffffff;
-  --color-surface-raised: #ffffff;
-  --color-surface-hover: #f1f5f9;
-  --color-ink: #0f172a;
-  --color-ink-muted: #64748b;
-  --color-line: #e2e8f0;
-  --color-accent: #4f46e5;
-  --color-accent-soft: #e0e7ff;
-  --color-accent-ink: #3730a3;
+:root {
+  --surface: #fdfcfa;
+  --surface-sidebar: #f3f1ec;
+  --surface-raised: #ffffff;
+  --surface-hover: #efede7;
+  --ink: #1d1c1a;
+  --ink-muted: #66625b;
+  --line: #e7e4dd;
+  --line-strong: #8c877d;
+  --accent: #1d1c1a;
+  --accent-ink: #fdfcfa;
+  --accent-soft: #ebe8e1;
+  --done: #1c7a45;
+  --done-soft: #dcf3e4;
+  --danger: #b3261e;
+  --priority-1: #c93a32;
+  --priority-2: #bd5b0c;
+  --priority-3: #94700a;
+  --tint-red: #fbe5e2;
+  --tint-orange: #fdeadb;
+  --tint-yellow: #faf0cc;
+  --tint-green: #e1f3e4;
+  --tint-blue: #e0eefb;
+  --tint-purple: #eee6fb;
+  --tint-grey: #eeece7;
+  --bar: #bdb8ad;
+  --nav-active: #ffffff;
+  --shadow-raised: 0 1px 2px rgba(40, 34, 24, 0.07);
+  --shadow-overlay: 0 16px 40px rgba(40, 34, 24, 0.14);
+  --scrim: rgba(40, 34, 24, 0.28);
+  color-scheme: light;
 }
 
+/* Dark values: used when the setting is Dark, or System while macOS is dark. */
+:root[data-theme="dark"] {
+  --surface: #1c1b19;
+  --surface-sidebar: #161513;
+  --surface-raised: #262522;
+  --surface-hover: #2e2c29;
+  --ink: #f2f0ea;
+  --ink-muted: #aaa59b;
+  --line: #34322e;
+  --line-strong: #7d786e;
+  --accent: #f2f0ea;
+  --accent-ink: #1c1b19;
+  --accent-soft: #35332f;
+  --done: #6fd39a;
+  --done-soft: #173525;
+  --danger: #ff9189;
+  --priority-1: #ff8078;
+  --priority-2: #f59a4c;
+  --priority-3: #e3bc45;
+  --tint-red: #432522;
+  --tint-orange: #422c1b;
+  --tint-yellow: #3b3218;
+  --tint-green: #1e3526;
+  --tint-blue: #1c3043;
+  --tint-purple: #312942;
+  --tint-grey: #302e2b;
+  --bar: #5a5650;
+  --nav-active: #35332f;
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --scrim: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
-    --color-surface: #020617;
-    --color-surface-raised: #0f172a;
-    --color-surface-hover: #1e293b;
-    --color-ink: #f1f5f9;
-    --color-ink-muted: #94a3b8;
-    --color-line: #1e293b;
-    --color-accent: #818cf8;
-    --color-accent-soft: #1e1b4b;
-    --color-accent-ink: #c7d2fe;
+  :root:not([data-theme="light"]) {
+    --surface: #1c1b19;
+    --surface-sidebar: #161513;
+    --surface-raised: #262522;
+    --surface-hover: #2e2c29;
+    --ink: #f2f0ea;
+    --ink-muted: #aaa59b;
+    --line: #34322e;
+    --line-strong: #7d786e;
+    --accent: #f2f0ea;
+    --accent-ink: #1c1b19;
+    --accent-soft: #35332f;
+    --done: #6fd39a;
+    --done-soft: #173525;
+    --danger: #ff9189;
+    --priority-1: #ff8078;
+    --priority-2: #f59a4c;
+    --priority-3: #e3bc45;
+    --tint-red: #432522;
+    --tint-orange: #422c1b;
+    --tint-yellow: #3b3218;
+    --tint-green: #1e3526;
+    --tint-blue: #1c3043;
+    --tint-purple: #312942;
+    --tint-grey: #302e2b;
+    --bar: #5a5650;
+  --nav-active: #35332f;
+    --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.55);
+    --scrim: rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
   }
 }
 
-:root { color-scheme: light dark; }
-body { @apply bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-sidebar: var(--surface-sidebar);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-done: var(--done);
+  --color-done-soft: var(--done-soft);
+  --color-danger: var(--danger);
+  --color-p1: var(--priority-1);
+  --color-p2: var(--priority-2);
+  --color-p3: var(--priority-3);
+  --color-tint-red: var(--tint-red);
+  --color-tint-orange: var(--tint-orange);
+  --color-tint-yellow: var(--tint-yellow);
+  --color-tint-green: var(--tint-green);
+  --color-tint-blue: var(--tint-blue);
+  --color-tint-purple: var(--tint-purple);
+  --color-tint-grey: var(--tint-grey);
+  --color-scrim: var(--scrim);
+  --shadow-raised: var(--shadow-raised);
+  --shadow-overlay: var(--shadow-overlay);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --font-sans: "Inter Variable", Inter, -apple-system, system-ui, sans-serif;
+  --font-serif: Newsreader, Georgia, serif;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font: 400 14px/20px var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  button {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--ink-muted);
+  }
+}
+
+@layer components {
+  /* View titles: Today, Inbox, project names. */
+  .tj-display {
+    font: 300 32px/38px var(--font-serif);
+    letter-spacing: -0.01em;
+  }
+  /* Dialog and task detail titles. */
+  .tj-title {
+    font: 300 22px/28px var(--font-serif);
+  }
+  .tj-stat {
+    font: 300 30px/32px var(--font-serif);
+  }
+  .tj-label {
+    font: 500 12px/16px var(--font-sans);
+    color: var(--ink-muted);
+  }
+  .tj-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    font: 500 14px/20px var(--font-sans);
+    color: var(--ink);
+    background: transparent;
+  }
+  .tj-btn:hover {
+    background: var(--surface-hover);
+  }
+  .tj-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .tj-btn-primary,
+  .tj-btn-primary:hover {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  .tj-btn-secondary {
+    border-color: var(--line-strong);
+  }
+  .tj-btn-sm {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .tj-input {
+    height: 34px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--ink);
+    font: 400 14px var(--font-sans);
+  }
+  .tj-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+  .tj-kbd {
+    font: 500 11px/16px var(--font-sans);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-hover);
+    color: var(--ink);
+  }
+  .tj-pop {
+    background: var(--surface-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay);
+  }
+}
+
+/* Popovers and the Move to dropdown open with a short grow-and-fade. */
+@keyframes tj-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes tj-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.tj-anim-pop {
+  animation: tj-pop-in 140ms ease-out;
+  transform-origin: top right;
+}
+.tj-anim-fade {
+  animation: tj-fade-in 120ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tj-anim-pop,
+  .tj-anim-fade {
+    animation: none;
+  }
+}

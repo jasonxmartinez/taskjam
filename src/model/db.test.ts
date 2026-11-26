@@ -19,6 +19,11 @@ import {
   setTimeSpent,
   startTimer,
   todayTasks,
+  doneToday,
+  deadlinesSoon,
+  deleteTask,
+  openCounts,
+  parseDurationText,
 } from "./db";
 import { DEFAULT_PROJECT_COLOR, INBOX_ID } from "./types";
 
@@ -177,5 +182,55 @@ describe("dragging tasks in a project", () => {
     expect(titles()).toEqual([["three", "two"], []]);
     expect(s.tasks.find((t) => t.id === sub.task.id)!.projectId).toBe(q.project.id);
     expect(() => placeTask(s, sub.task.id, { projectId: p.project.id, sectionId: null, index: 0 })).toThrow(/Subtasks/);
+  });
+});
+
+describe("mockup additions", () => {
+  const at = (date: string, h = 12) => new Date(`${date}T${String(h).padStart(2, "0")}:00:00`).getTime();
+
+  it("keeps tasks finished today on Today, struck through", () => {
+    let s = emptyState();
+    const a = addTask(s, { title: "trash", dueDate: "2026-11-26" });
+    s = completeTask(a.state, a.task.id, at("2026-11-26", 8));
+    const b = addTask(s, { title: "old one", dueDate: "2026-11-20" });
+    s = completeTask(b.state, b.task.id, at("2026-11-25"));
+    const c = addTask(s, { title: "future", dueDate: "2026-12-01" });
+    s = completeTask(c.state, c.task.id, at("2026-11-26", 9));
+    expect(doneToday(s, "2026-11-26", at("2026-11-26", 15)).map((t) => t.title)).toEqual(["trash"]);
+  });
+
+  it("lists deadlines in the next 3 days that are not already on Today", () => {
+    let s = addTask(emptyState(), { title: "memo", deadline: "2026-11-29", dueDate: "2026-11-30" }).state;
+    s = addTask(s, { title: "on today", deadline: "2026-11-27", dueDate: "2026-11-26" }).state;
+    s = addTask(s, { title: "far", deadline: "2026-12-10" }).state;
+    s = addTask(s, { title: "no date", deadline: "2026-11-26" }).state;
+    expect(deadlinesSoon(s, "2026-11-26").map((t) => t.title)).toEqual(["no date", "memo"]);
+  });
+
+  it("deletes a task with its subtasks", () => {
+    const p = addTask(emptyState(), { title: "parent" });
+    let s = addTask(p.state, { title: "child", parentId: p.task.id }).state;
+    s = addTask(s, { title: "other" }).state;
+    expect(deleteTask(s, p.task.id).tasks.map((t) => t.title)).toEqual(["other"]);
+  });
+
+  it("counts open top-level tasks per project", () => {
+    const p = addTask(emptyState(), { title: "a" });
+    let s = addTask(p.state, { title: "sub", parentId: p.task.id }).state;
+    const d = addTask(s, { title: "done" });
+    s = completeTask(d.state, d.task.id);
+    expect(openCounts(s).get(INBOX_ID)).toBe(1);
+  });
+
+  it("reads typed planned durations", () => {
+    expect(parseDurationText("2h")).toBe(120);
+    expect(parseDurationText("1h30m")).toBe(90);
+    expect(parseDurationText("1.5h")).toBe(90);
+    expect(parseDurationText("45m")).toBe(45);
+    expect(parseDurationText("45 min")).toBe(45);
+    expect(parseDurationText("90")).toBe(90);
+    expect(parseDurationText("1:15")).toBe(75);
+    expect(parseDurationText("soon")).toBeNull();
+    expect(parseDurationText("")).toBeNull();
   });
 });

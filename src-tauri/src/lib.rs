@@ -28,7 +28,7 @@ fn show_quick_add(app: &AppHandle) {
     }
     let built = WebviewWindowBuilder::new(app, "quick", WebviewUrl::App("index.html#quick".into()))
         .title("Quick add")
-        .inner_size(600.0, 150.0)
+        .inner_size(600.0, 380.0)
         .resizable(false)
         .decorations(false)
         .always_on_top(true)

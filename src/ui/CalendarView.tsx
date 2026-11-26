@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight, Flag } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { addDays, dayRange, DEFAULT_BLOCK_MIN, formatDuration, HOUR_PX, layoutBlocks, minutesToTime, resizeDuration, snapMinutes, timeToMinutes } from "../calendar/layout";
 import { eventsForDay, type CalEvent } from "../google/events";
@@ -5,16 +6,11 @@ import { useGoogleEvents } from "../google/useGoogleEvents";
 import { localDate, updateTask } from "../model/db";
 import type { Task } from "../model/types";
 import { useStore } from "../store";
+import { ICON } from "./common";
+import { fmtTime, timeRange, tintFor } from "./format";
 import type { QuickAddDefaults } from "./QuickAdd";
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
-const PRIORITY_BG: Record<number, string> = {
-  1: "bg-red-100 border-red-500 text-red-900 dark:bg-red-950 dark:text-red-100",
-  2: "bg-orange-100 border-orange-500 text-orange-900 dark:bg-orange-950 dark:text-orange-100",
-  3: "bg-yellow-100 border-yellow-500 text-yellow-900 dark:bg-yellow-950 dark:text-yellow-100",
-  4: "bg-indigo-100 border-indigo-500 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-100",
-};
-
 function EventChip({ event: e }: { event: CalEvent }) {
   return (
     <a
@@ -22,15 +18,21 @@ function EventChip({ event: e }: { event: CalEvent }) {
       target="_blank"
       rel="noreferrer"
       title={`${e.title} (${e.calendarName})`}
-      className="block truncate rounded border-l-4 px-1.5 py-0.5 text-xs text-slate-800 dark:text-slate-100"
-      style={{ borderColor: e.color, backgroundColor: e.color + "33" }}
+      className="block truncate rounded-md border border-line-strong px-2 py-0.5 text-xs"
     >
       {e.title}
     </a>
   );
 }
 
-const hourLabel = (h: number) => (h === 0 ? "" : new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: "numeric" }));
+const hourLabel = (h: number) => (h === 0 ? "" : `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}`);
+const eventTime = (e: CalEvent) => {
+  const t = (ms: number) => {
+    const d = new Date(ms);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+  return timeRange(t(e.startMs), Math.round((e.endMs - e.startMs) / 60000));
+};
 
 export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => void; onQuickAdd: (d: QuickAddDefaults) => void }) {
   const { state, apply } = useStore();
@@ -58,7 +60,7 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
   const scroller = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scroller.current) scroller.current.scrollTop = HOUR_PX * 7;
+    if (scroller.current) scroller.current.scrollTop = HOUR_PX * 7 - 10;
   }, []);
 
   const [scrollbarW, setScrollbarW] = useState(0);
@@ -79,6 +81,7 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
   }, []);
 
   const open = state.tasks.filter((t) => !t.completedAt && !t.parentId);
+  const tint = (t: Task) => tintFor(state.projects.find((p) => p.id === t.projectId)?.color);
   const move = (id: string, date: string, time: string | null) =>
     apply((s) => updateTask(s, id, { dueDate: date, dueTime: time }));
 
@@ -137,57 +140,68 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
 
   return (
     <div className="flex h-full flex-col">
-      <div className="mb-3 flex items-center gap-2">
-        <h1 className="mr-4 text-2xl font-semibold">Calendar</h1>
-        <button className="rounded border border-slate-300 px-2 py-1 text-sm dark:border-slate-700" onClick={() => setStart(addDays(start, -1))} aria-label="Previous day">←</button>
-        <button className="rounded border border-slate-300 px-2 py-1 text-sm dark:border-slate-700" onClick={() => setStart(today)}>Today</button>
-        <button className="rounded border border-slate-300 px-2 py-1 text-sm dark:border-slate-700" onClick={() => setStart(addDays(start, 1))} aria-label="Next day">→</button>
+      <div className="mb-4 flex items-center gap-2">
+        <h1 className="tj-display m-0 mr-3">Calendar</h1>
+        <button className="tj-btn tj-btn-secondary !h-8 !w-8 !p-0 !border-line" onClick={() => setStart(addDays(start, -1))} aria-label="Previous day">
+          <ChevronLeft {...ICON} />
+        </button>
+        <button className="tj-btn tj-btn-secondary !h-8 !px-3 !border-line" onClick={() => setStart(today)}>
+          Today
+        </button>
+        <button className="tj-btn tj-btn-secondary !h-8 !w-8 !p-0 !border-line" onClick={() => setStart(addDays(start, 1))} aria-label="Next day">
+          <ChevronRight {...ICON} />
+        </button>
         {google.connected && (
-          <label className="ml-4 flex items-center gap-1.5 text-sm">
-            <input type="checkbox" checked={showEvents} onChange={(e) => toggleEvents(e.target.checked)} />
+          <label className="ml-4 flex items-center gap-2">
+            <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={showEvents} onChange={(e) => toggleEvents(e.target.checked)} />
             Google events
-            {google.loading && <span className="text-xs text-slate-500">…</span>}
+            {google.loading && <span className="text-xs text-ink-muted">…</span>}
           </label>
         )}
-        <div className="ml-auto inline-flex overflow-hidden rounded border border-slate-300 text-sm dark:border-slate-700" role="group" aria-label="Days shown">
+        <div className="ml-auto inline-flex gap-0.5 rounded-[10px] bg-surface-hover p-[3px]" role="group" aria-label="Days shown">
           {([3, 4, 5] as const).map((n) => (
             <button
               key={n}
               aria-pressed={span === n}
               onClick={() => setSpan(n)}
-              className={`px-3 py-1 ${span === n ? "bg-indigo-600 text-white" : "hover:bg-slate-100 dark:hover:bg-slate-900"}`}
+              className={`rounded-md px-3 py-1 ${span === n ? "bg-surface-raised font-medium text-ink shadow-raised" : "text-ink-muted"}`}
             >
-              {n} day
+              {n} days
             </button>
           ))}
         </div>
       </div>
 
       {google.error && (
-        <div className="mb-2 rounded bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+        <div className="mb-2 rounded-md bg-tint-yellow px-3 py-1.5 text-xs">
           Google Calendar: {google.error}
         </div>
       )}
-      <div className="grid border-b border-slate-200 dark:border-slate-800" style={{ ...cols, ...gutter }}>
+      <div className="grid border-b border-line" style={{ ...cols, ...gutter }}>
         <div />
         {days.map((d) => {
           const date = new Date(d + "T00:00:00");
           return (
-            <div key={d} className={`px-2 pb-1 text-center ${d === today ? "text-indigo-600" : ""}`}>
-              <div className="text-xs uppercase text-slate-500">{date.toLocaleDateString(undefined, { weekday: "short" })}</div>
-              <div className="text-lg font-semibold">{date.getDate()}</div>
+            <div key={d} className="flex items-center justify-center gap-2 pb-2">
+              <span className="text-xs text-ink-muted">{date.toLocaleDateString("en-US", { weekday: "short" })}</span>
+              <span
+                className={`flex h-9 min-w-9 items-center justify-center rounded-full font-serif text-[22px] font-light ${d === today ? "bg-accent text-accent-ink" : ""}`}
+                aria-current={d === today ? "date" : undefined}
+              >
+                {date.getDate()}
+              </span>
             </div>
           );
         })}
       </div>
 
       {/* Untimed tasks and deadlines */}
-      <div className="grid border-b border-slate-200 dark:border-slate-800" style={{ ...cols, ...gutter }}>
-        <div className="px-1 py-1 text-right text-[10px] text-slate-500">all day</div>
+      <div className="grid border-b border-line" style={{ ...cols, ...gutter }}>
+        <div className="py-1.5 pr-2 text-right text-xs text-ink-muted">All day</div>
         {days.map((d) => (
           <div
             key={d}
-            className="min-h-10 space-y-1 border-l border-slate-200 p-1 dark:border-slate-800"
+            className="min-h-12 space-y-1 border-l border-line p-1"
             onDragOver={allow}
             onDrop={(e) => {
               const id = e.dataTransfer.getData("text/task");
@@ -203,7 +217,8 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
                 draggable
                 onDragStart={(e) => onDragStart(e, t)}
                 onClick={() => onOpen(t.id)}
-                className={`block w-full truncate rounded border-l-4 px-1.5 py-0.5 text-left text-xs ${PRIORITY_BG[t.priority]}`}
+                className="block w-full truncate rounded-md px-2 py-0.5 text-left text-xs"
+                style={{ background: tint(t) }}
               >
                 {t.title}
               </button>
@@ -212,10 +227,11 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
               <button
                 key={"dl" + t.id}
                 onClick={() => onOpen(t.id)}
-                className="block w-full truncate rounded px-1.5 py-0.5 text-left text-xs text-red-700 dark:text-red-300"
+                className="flex w-full items-center gap-1 truncate rounded-md px-1 py-0.5 text-left text-xs text-danger"
                 title="Deadline"
               >
-                ⚑ {t.title}
+                <Flag size={12} strokeWidth={1.75} aria-hidden className="shrink-0" />
+                <span className="truncate">{t.title} due</span>
               </button>
             ))}
           </div>
@@ -227,8 +243,8 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
         <div className="relative grid" style={{ ...cols, height: HOUR_PX * 24 }}>
           <div>
             {HOURS.map((h) => (
-              <div key={h} className="pr-1 text-right text-[10px] text-slate-500" style={{ height: HOUR_PX }}>
-                <span className="relative -top-1.5">{hourLabel(h)}</span>
+              <div key={h} className="pr-2 text-right text-xs text-ink-muted" style={{ height: HOUR_PX }}>
+                <span className="relative -top-2">{hourLabel(h)}</span>
               </div>
             ))}
           </div>
@@ -251,7 +267,7 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
               <div
                 key={d}
                 data-day={d}
-                className="relative border-l border-slate-200 dark:border-slate-800"
+                className="relative border-l border-line"
                 onDragOver={allow}
                 onDrop={(e) => {
                   const id = e.dataTransfer.getData("text/task");
@@ -266,14 +282,14 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
                 }}
               >
                 {HOURS.map((h) => (
-                  <div key={h} data-slot="1" className="border-t border-slate-100 dark:border-slate-900" style={{ height: HOUR_PX }} />
+                  <div key={h} data-slot="1" className="border-t border-line" style={{ height: HOUR_PX }} />
                 ))}
                 {placed.map((p) => {
                   const pos = {
-                    top: (p.top / 60) * HOUR_PX,
-                    height: (p.height / 60) * HOUR_PX - 1,
-                    left: `${(p.lane / p.lanes) * 100}%`,
-                    width: `calc(${100 / p.lanes}% - 2px)`,
+                    top: (p.top / 60) * HOUR_PX + 1,
+                    height: (p.height / 60) * HOUR_PX - 3,
+                    left: `calc(${(p.lane / p.lanes) * 100}% + 4px)`,
+                    width: `calc(${100 / p.lanes}% - 8px)`,
                   };
                   if (p.item.kind === "event") {
                     const e = p.item.event;
@@ -285,10 +301,11 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
                         rel="noreferrer"
                         title={`${e.title} (${e.calendarName})`}
                         onClick={(ev) => ev.stopPropagation()}
-                        className="absolute block overflow-hidden rounded border-l-4 px-1.5 py-0.5 text-xs text-slate-800 dark:text-slate-100"
-                        style={{ ...pos, borderColor: e.color, backgroundColor: e.color + "33" }}
+                        className="absolute block overflow-hidden rounded-[10px] border border-line-strong bg-surface px-2.5 py-1 text-[13px] leading-[18px]"
+                        style={pos}
                       >
-                        <div className="truncate font-medium">{e.title}</div>
+                        <div className="truncate">{e.title}</div>
+                        <div className="truncate text-[11px] leading-[14px] text-ink-muted">{eventTime(e)} · Google</div>
                       </a>
                     );
                   }
@@ -303,13 +320,13 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
                         ev.stopPropagation();
                         if (!justResized.current) onOpen(task.id);
                       }}
-                      className={`group absolute overflow-hidden rounded border-l-4 px-1.5 py-0.5 text-left text-xs ${PRIORITY_BG[task.priority]} ${active ? "z-10 shadow-md ring-1 ring-accent" : ""}`}
-                      style={pos}
+                      className={`group absolute overflow-hidden rounded-[10px] px-2.5 py-1 text-left text-[13px] leading-[18px] ${active ? "z-10 shadow-overlay ring-1 ring-accent" : ""}`}
+                      style={{ ...pos, background: tint(task) }}
+                      title={`${task.title}, ${formatDuration(durationOf(task))}`}
                     >
-                      <div className="truncate font-medium">{task.title}</div>
-                      <div className="opacity-70">
-                        {task.dueTime}
-                        {active || task.durationMin ? ` · ${formatDuration(durationOf(task))}` : ""}
+                      <div className="truncate">{task.title}</div>
+                      <div className="truncate text-[11px] leading-[14px] text-ink-muted">
+                        {task.durationMin || active ? timeRange(task.dueTime!, durationOf(task)) : fmtTime(task.dueTime!)}
                       </div>
                       <div
                         role="separator"
@@ -326,7 +343,9 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
                   );
                 })}
                 {d === today && (
-                  <div className="pointer-events-none absolute left-0 right-0 border-t-2 border-red-500" style={{ top: (nowMin / 60) * HOUR_PX }} />
+                  <div className="pointer-events-none absolute left-0 right-0 z-20 border-t border-danger" style={{ top: (nowMin / 60) * HOUR_PX }}>
+                    <span className="absolute -left-[5px] -top-[5px] h-[9px] w-[9px] rounded-full bg-danger" />
+                  </div>
                 )}
               </div>
             );

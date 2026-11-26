@@ -14,6 +14,15 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   return (await Notification.requestPermission()) === "granted";
 }
 
+/** Whether notifications are allowed, without asking. */
+export async function notificationsGranted(): Promise<boolean> {
+  if (isTauri()) {
+    const n = await import("@tauri-apps/plugin-notification");
+    return n.isPermissionGranted();
+  }
+  return typeof Notification !== "undefined" && Notification.permission === "granted";
+}
+
 export async function notify(title: string, body: string, onClick?: () => void) {
   if (isTauri()) {
     const n = await import("@tauri-apps/plugin-notification");

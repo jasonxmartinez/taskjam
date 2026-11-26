@@ -1,10 +1,17 @@
-import { useState } from "react";
-import { addSection, inboxTasks, localDate, placeTask, projectTasks, renameProject, setProjectColor, todayTasks } from "../model/db";
-import type { Task } from "../model/types";
+import { Ellipsis, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { addSection, deadlinesSoon, doneToday, inboxTasks, localDate, placeTask, projectTasks, renameProject, setProjectColor, todayTasks, updateTask } from "../model/db";
+import type { Priority, Task } from "../model/types";
 import { useStore } from "../store";
-import { ColorDot, ColorPicker } from "./ColorPicker";
+import { ColorPicker } from "./ColorPicker";
+import { Backdrop, Dot, GroupHeader, ICON, ViewTitle } from "./common";
+import { longDate } from "./format";
 import { TASK_MIME } from "./ProjectSidebar";
-import { TaskRow } from "./TaskRow";
+import { TaskRow, type RowContext } from "./TaskRow";
+
+/** How a task detail opens: plain, with Move to showing, or with the Due field open. */
+export type OpenMode = "move" | "due" | undefined;
+export type OnOpen = (id: string, mode?: OpenMode) => void;
 
 /** Where a dragged task lands in a project view. */
 type Target = { projectId: string; sectionId: string | null };
@@ -18,14 +25,20 @@ const keyOf = (t: Target) => `${t.projectId}:${t.sectionId ?? ""}`;
 function List({
   tasks,
   onOpen,
+  context,
   empty,
+  selected,
+  onHover,
   target,
   dropAt,
   setDropAt,
 }: {
   tasks: Task[];
-  onOpen: (id: string) => void;
+  onOpen: OnOpen;
+  context: RowContext;
   empty?: string;
+  selected?: string | null;
+  onHover?: (id: string) => void;
   target?: Target;
   dropAt?: DropAt;
   setDropAt?: (d: DropAt) => void;
@@ -54,15 +67,15 @@ function List({
     const from = tasks.findIndex((t) => t.id === id);
     apply((s) => placeTask(s, id, { ...target, index: from >= 0 && from < index ? index - 1 : index }));
   };
-  const line = <div className="mx-2 h-0.5 rounded bg-accent" />;
+  const line = <div className="h-0.5 rounded bg-accent" />;
 
-  if (!tasks.length && !target) return empty ? <div className="px-2 py-3 text-sm text-ink-muted">{empty}</div> : null;
+  if (!tasks.length && !target) return empty ? <div className="py-3 text-sm text-ink-muted">{empty}</div> : null;
   return (
     <div onDragOver={(e) => over(e, tasks.length)} onDrop={dropped} className={target && dropAt ? "min-h-8 pb-1" : ""}>
       {tasks.map((t, i) => (
         <div
           key={t.id}
-          draggable
+          draggable={!t.completedAt}
           onDragStart={(e) => {
             e.dataTransfer.setData(TASK_MIME, t.id);
             e.dataTransfer.effectAllowed = "move";
@@ -79,51 +92,126 @@ function List({
           className={dragging === t.id ? "opacity-40" : ""}
         >
           {showAt === i && line}
-          <TaskRow task={t} onOpen={onOpen} />
+          <TaskRow task={t} onOpen={(id) => onOpen(id)} context={context} selected={selected === t.id} onHover={onHover} />
         </div>
       ))}
       {showAt === tasks.length && line}
-      {!tasks.length && empty && showAt < 0 && <div className="px-2 py-2 text-sm text-ink-muted">{empty}</div>}
+      {!tasks.length && empty && showAt < 0 && <div className="py-2 text-sm text-ink-muted">{empty}</div>}
     </div>
   );
 }
 
-const H = ({ children }: { children: React.ReactNode }) => (
-  <h2 className="mb-1 mt-5 px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{children}</h2>
-);
+const isTyping = (e: KeyboardEvent) => {
+  const el = e.target as HTMLElement;
+  return !!el.closest("input, textarea, select, [contenteditable]") || e.metaKey || e.ctrlKey || e.altKey;
+};
 
-export function InboxView({ onOpen }: { onOpen: (id: string) => void }) {
-  const { state } = useStore();
+export function InboxView({ onOpen, onAdd, paused }: { onOpen: OnOpen; onAdd: () => void; paused: boolean }) {
+  const { state, apply } = useStore();
+  const tasks = inboxTasks(state);
+  const [selected, setSelected] = useState<string | null>(null);
+  const current = tasks.find((t) => t.id === selected)?.id ?? tasks[0]?.id ?? null;
+
+  // Triage keys: arrows pick a task, M moves it, T schedules it, 1 to 4 set priority.
+  useEffect(() => {
+    if (paused) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (isTyping(e) || !current) return;
+      const k = e.key.toLowerCase();
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const i = tasks.findIndex((t) => t.id === current);
+        const next = tasks[Math.max(0, Math.min(tasks.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))];
+        setSelected(next.id);
+      } else if (k === "m") {
+        e.preventDefault();
+        onOpen(current, "move");
+      } else if (k === "t") {
+        e.preventDefault();
+        onOpen(current, "due");
+      } else if (/^[1-4]$/.test(e.key)) {
+        e.preventDefault();
+        apply((s) => updateTask(s, current, { priority: Number(e.key) as Priority }));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        onOpen(current);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [paused, current, tasks, onOpen, apply]);
+
   return (
     <>
-      <h1 className="mb-2 px-2 text-2xl font-semibold">Inbox</h1>
-      <List tasks={inboxTasks(state)} onOpen={onOpen} empty="Inbox zero. Press Q to capture something." />
+      <ViewTitle title="Inbox" subtitle={tasks.length ? `${tasks.length} task${tasks.length === 1 ? "" : "s"} to sort, newest first` : "Nothing to sort"} />
+      <div className="mt-5">
+        <List tasks={tasks} onOpen={onOpen} context="inbox" selected={selected ? current : null} onHover={setSelected} empty="Inbox zero. Press Q to capture something." />
+      </div>
+      <AddTaskLine onClick={onAdd} />
+      {tasks.length > 0 && (
+        <div className="mt-8 flex flex-wrap gap-4 text-xs text-ink-muted">
+          <span>
+            <kbd className="tj-kbd">M</kbd> Move
+          </span>
+          <span>
+            <kbd className="tj-kbd">T</kbd> Schedule
+          </span>
+          <span>
+            <kbd className="tj-kbd">1</kbd> to <kbd className="tj-kbd">4</kbd> Priority
+          </span>
+          <span>
+            <kbd className="tj-kbd">↑</kbd> <kbd className="tj-kbd">↓</kbd> Select
+          </span>
+        </div>
+      )}
     </>
   );
 }
 
-export function TodayView({ onOpen }: { onOpen: (id: string) => void }) {
+function AddTaskLine({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="mt-3 flex h-8 items-center gap-2 rounded-md text-ink-muted hover:text-ink">
+      <Plus {...ICON} />
+      Add task
+    </button>
+  );
+}
+
+export function TodayView({ onOpen }: { onOpen: OnOpen }) {
   const { state, apply } = useStore();
   const today = localDate(new Date());
   const { overdue, today: due } = todayTasks(state, today);
+  const finished = doneToday(state, today);
+  const soon = deadlinesSoon(state, today);
+  const todays = [...due, ...finished];
   return (
     <>
-      <h1 className="mb-2 px-2 text-2xl font-semibold">Today</h1>
+      <ViewTitle title="Today" subtitle={longDate(today)} />
       {overdue.length > 0 && (
         <>
-          <div className="flex items-center justify-between">
-            <H>Overdue</H>
-            <button
-              className="px-2 text-xs text-indigo-600"
-              onClick={() => apply((s) => ({ ...s, tasks: s.tasks.map((t) => (!t.completedAt && !t.parentId && t.dueDate && t.dueDate < today ? { ...t, dueDate: today } : t)) }))}
-            >
-              Reschedule all to today
-            </button>
-          </div>
-          <List tasks={overdue} onOpen={onOpen} />
+          <GroupHeader
+            action={
+              <button
+                className="tj-btn tj-btn-secondary tj-btn-sm"
+                onClick={() => apply((s) => ({ ...s, tasks: s.tasks.map((t) => (!t.completedAt && !t.parentId && t.dueDate && t.dueDate < today ? { ...t, dueDate: today } : t)) }))}
+              >
+                Reschedule all to today
+              </button>
+            }
+          >
+            Overdue
+          </GroupHeader>
+          <List tasks={overdue} onOpen={onOpen} context="today" />
         </>
       )}
-      <List tasks={due} onOpen={onOpen} empty={overdue.length ? undefined : "Nothing due today."} />
+      <GroupHeader>Today</GroupHeader>
+      <List tasks={todays} onOpen={onOpen} context="today" empty="Nothing due today. Press Q to plan something." />
+      {soon.length > 0 && (
+        <>
+          <GroupHeader>Deadlines soon</GroupHeader>
+          <List tasks={soon} onOpen={onOpen} context="deadlines" />
+        </>
+      )}
     </>
   );
 }
@@ -132,24 +220,30 @@ function ProjectTitle({ projectId }: { projectId: string }) {
   const { state, apply } = useStore();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const [picking, setPicking] = useState(false);
+  const [menu, setMenu] = useState<null | "menu" | "color">(null);
   const [error, setError] = useState<string | null>(null);
   const project = state.projects.find((p) => p.id === projectId)!;
   const parent = project.parentId ? state.projects.find((p) => p.id === project.parentId) : null;
+  const startRename = () => {
+    setDraft(project.name);
+    setEditing(true);
+    setMenu(null);
+  };
   const save = () => {
     setEditing(false);
     if (draft.trim() && draft.trim() !== project.name) setError(apply((s) => renameProject(s, projectId, draft)));
   };
   return (
-    <div className="relative mb-2 px-2">
-      <h1 className="flex items-center gap-3 text-2xl font-semibold">
-        <button className="rounded-full p-1 hover:bg-surface-hover" title="Change color" aria-label="Change project color" onClick={() => setPicking(!picking)}>
-          <ColorDot color={project.color} className="h-3.5 w-3.5" />
+    <div className="relative">
+      {parent && <div className="text-xs text-ink-muted">{parent.name}</div>}
+      <div className="flex items-center gap-3">
+        <button className="rounded-full p-1 hover:bg-surface-hover" title="Change color" aria-label="Change project color" onClick={() => setMenu(menu === "color" ? null : "color")}>
+          <Dot color={project.color} size={12} />
         </button>
-        {parent && <span className="text-ink-muted">{parent.name} /</span>}
         {editing ? (
           <input
             autoFocus
+            aria-label="Project name"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onFocus={(e) => e.currentTarget.select()}
@@ -161,34 +255,44 @@ function ProjectTitle({ projectId }: { projectId: string }) {
                 setEditing(false);
               }
             }}
-            className="min-w-0 flex-1 rounded border border-line bg-surface px-1"
+            className="tj-display min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-2"
           />
         ) : (
-          <button
-            className="group flex items-center gap-2 rounded px-1 text-left hover:bg-surface-hover"
-            title="Click to rename"
-            onClick={() => {
-              setDraft(project.name);
-              setEditing(true);
-            }}
-          >
-            {project.name}
-            <span className="text-sm font-normal text-ink-muted opacity-0 group-hover:opacity-100">✎</span>
-          </button>
+          <h1 className="tj-display m-0 min-w-0 truncate">
+            <button className="rounded-md px-1 text-left hover:bg-surface-hover" title="Click to rename" onClick={startRename}>
+              {project.name}
+            </button>
+          </h1>
         )}
-      </h1>
-      {error && <div className="text-xs text-red-600">{error}</div>}
-      {picking && (
+        <button
+          aria-label="Project options"
+          aria-expanded={menu === "menu"}
+          onClick={() => setMenu(menu === "menu" ? null : "menu")}
+          className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-ink-muted hover:bg-surface-hover"
+        >
+          <Ellipsis {...ICON} />
+        </button>
+      </div>
+      {error && <div className="text-xs text-danger">{error}</div>}
+      {menu && (
         <>
-          <div className="fixed inset-0 z-20" onClick={() => setPicking(false)} />
-          <div className="absolute left-2 top-full z-30 mt-1 rounded-md border border-line bg-surface-raised p-2 shadow-lg">
-            <ColorPicker
-              value={project.color}
-              onChange={(c) => {
-                apply((s) => setProjectColor(s, projectId, c));
-                setPicking(false);
-              }}
-            />
+          <Backdrop onClose={() => setMenu(null)} />
+          <div className={`tj-pop tj-anim-pop absolute top-full z-40 mt-1 p-2 ${menu === "menu" ? "right-0 w-56" : "left-0"}`}>
+            {menu === "menu" && (
+              <button className="w-full rounded-md px-2 py-1.5 text-left hover:bg-surface-hover" onClick={startRename}>
+                Rename
+              </button>
+            )}
+            <div className="px-2 py-1">
+              {menu === "menu" && <div className="mb-1.5 text-xs text-ink-muted">Color</div>}
+              <ColorPicker
+                value={project.color}
+                onChange={(c) => {
+                  apply((s) => setProjectColor(s, projectId, c));
+                  setMenu(null);
+                }}
+              />
+            </div>
           </div>
         </>
       )}
@@ -196,7 +300,7 @@ function ProjectTitle({ projectId }: { projectId: string }) {
   );
 }
 
-export function ProjectView({ projectId, onOpen }: { projectId: string; onOpen: (id: string) => void }) {
+export function ProjectView({ projectId, onOpen }: { projectId: string; onOpen: OnOpen }) {
   const { state, apply } = useStore();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -205,46 +309,49 @@ export function ProjectView({ projectId, onOpen }: { projectId: string; onOpen: 
   if (!project) return null;
   const { unsectioned, sections } = projectTasks(state, projectId);
   const subprojects = state.projects.filter((p) => p.parentId === projectId && !p.archived).sort((a, b) => a.order - b.order);
-  const dnd = { dropAt, setDropAt };
+  const dnd = { dropAt, setDropAt, onOpen, context: "project" as const };
 
   return (
     <div onDragEnd={() => setDropAt(null)}>
       <ProjectTitle key={projectId} projectId={projectId} />
-      <List tasks={unsectioned} onOpen={onOpen} target={{ projectId, sectionId: null }} {...dnd} />
+      <div className="mt-3">
+        <List tasks={unsectioned} target={{ projectId, sectionId: null }} empty={sections.length || subprojects.length ? undefined : "No tasks yet. Press Q to add one."} {...dnd} />
+      </div>
       {sections.map(({ section, tasks }) => (
         <div key={section.id}>
-          <H>
-            {section.name} <span className="font-normal">{tasks.length}</span>
-          </H>
-          <List tasks={tasks} onOpen={onOpen} target={{ projectId, sectionId: section.id }} empty="Drag tasks here." {...dnd} />
+          <GroupHeader>
+            {section.name} <span className="ml-1.5 font-normal">{tasks.length}</span>
+          </GroupHeader>
+          <List tasks={tasks} target={{ projectId, sectionId: section.id }} empty="Drag tasks here." {...dnd} />
         </div>
       ))}
       {subprojects.map((sp) => {
         const { unsectioned: u, sections: ss } = projectTasks(state, sp.id);
         return (
           <div key={sp.id}>
-            <H>
-              <span className="inline-flex items-center gap-2">
-                <ColorDot color={sp.color} />
-                {sp.name}
-              </span>
-            </H>
-            <List tasks={u} onOpen={onOpen} target={{ projectId: sp.id, sectionId: null }} empty={ss.length ? undefined : "No tasks yet."} {...dnd} />
+            <h2 className="tj-title mt-7 mb-0 flex items-center gap-2.5">
+              <Dot color={sp.color} />
+              {sp.name}
+            </h2>
+            <List tasks={u} target={{ projectId: sp.id, sectionId: null }} empty={ss.length ? undefined : "No tasks yet."} {...dnd} />
             {ss.map(({ section, tasks }) => (
-              <div key={section.id} className="ml-4">
-                <div className="px-2 pt-1 text-xs text-ink-muted">{section.name}</div>
-                <List tasks={tasks} onOpen={onOpen} target={{ projectId: sp.id, sectionId: section.id }} {...dnd} />
+              <div key={section.id}>
+                <GroupHeader>
+                  {section.name} <span className="ml-1.5 font-normal">{tasks.length}</span>
+                </GroupHeader>
+                <List tasks={tasks} target={{ projectId: sp.id, sectionId: section.id }} {...dnd} />
               </div>
             ))}
           </div>
         );
       })}
-      <div className="mt-6 flex gap-2 px-2">
+      <div className="mt-5 flex items-center gap-3">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Add section (any name)"
-          className="w-64 rounded border border-line bg-transparent p-1 text-sm"
+          placeholder="Add section"
+          aria-label="Add section"
+          className="tj-input !w-60"
           onKeyDown={(e) => {
             if (e.key === "Enter" && name.trim()) {
               setError(apply((s) => addSection(s, { name, projectId }).state));
@@ -252,7 +359,7 @@ export function ProjectView({ projectId, onOpen }: { projectId: string; onOpen: 
             }
           }}
         />
-        {error && <span className="text-xs text-red-600">{error}</span>}
+        {error && <span className="text-xs text-danger">{error}</span>}
       </div>
     </div>
   );
