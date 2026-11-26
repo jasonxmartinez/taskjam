@@ -90,3 +90,20 @@ export function layoutTimed(tasks: Task[]): Placed[] {
       .map((task) => ({ item: task, top: timeToMinutes(task.dueTime!), height: Math.max(task.durationMin ?? DEFAULT_BLOCK_MIN, 20) })),
   ).map(({ item, ...rest }) => ({ task: item, ...rest }));
 }
+
+/**
+ * New duration while dragging a block's bottom edge: the starting duration plus the
+ * drag distance, in 15-minute steps, at least 15 minutes, and never past midnight.
+ */
+export function resizeDuration(startMin: number, startDurationMin: number, deltaPx: number): number {
+  const raw = startDurationMin + (deltaPx / HOUR_PX) * 60;
+  const snapped = Math.round(raw / SNAP_MIN) * SNAP_MIN;
+  return Math.max(SNAP_MIN, Math.min(24 * 60 - startMin, snapped));
+}
+
+/** "1h 30m", "45m", "2h". */
+export function formatDuration(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return [h && `${h}h`, m && `${m}m`].filter(Boolean).join(" ") || "0m";
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { addDays, dayRange, DEFAULT_BLOCK_MIN, HOUR_PX, layoutBlocks, minutesToTime, snapMinutes, timeToMinutes } from "../calendar/layout";
+import { addDays, dayRange, DEFAULT_BLOCK_MIN, formatDuration, HOUR_PX, layoutBlocks, minutesToTime, resizeDuration, snapMinutes, timeToMinutes } from "../calendar/layout";
 import { eventsForDay, type CalEvent } from "../google/events";
 import { useGoogleEvents } from "../google/useGoogleEvents";
 import { localDate, updateTask } from "../model/db";
@@ -71,7 +71,45 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
   const move = (id: string, date: string, time: string | null) =>
     apply((s) => updateTask(s, id, { dueDate: date, dueTime: time }));
 
+  // Drag a task block's bottom edge to change its duration (15-minute steps).
+  const [resizing, setResizing] = useState<{ id: string; durationMin: number } | null>(null);
+  const resizeRef = useRef<{ id: string; durationMin: number } | null>(null);
+  const justResized = useRef(false);
+  const startResize = (e: React.PointerEvent, t: Task) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startY = e.clientY;
+    const startMin = timeToMinutes(t.dueTime!);
+    const startDur = t.durationMin ?? DEFAULT_BLOCK_MIN;
+    resizeRef.current = { id: t.id, durationMin: startDur };
+    setResizing(resizeRef.current);
+    const onMove = (ev: PointerEvent) => {
+      const durationMin = resizeDuration(startMin, startDur, ev.clientY - startY);
+      if (durationMin !== resizeRef.current?.durationMin) {
+        resizeRef.current = { id: t.id, durationMin };
+        setResizing(resizeRef.current);
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      const done = resizeRef.current;
+      resizeRef.current = null;
+      setResizing(null);
+      // The click that ends a resize must not open the task.
+      justResized.current = true;
+      setTimeout(() => (justResized.current = false), 0);
+      if (done && done.durationMin !== startDur) apply((s) => updateTask(s, done.id, { durationMin: done.durationMin }));
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+  const durationOf = (t: Task) => (resizing?.id === t.id ? resizing.durationMin : (t.durationMin ?? DEFAULT_BLOCK_MIN));
+
   const onDragStart = (e: React.DragEvent, t: Task) => {
+    if (resizeRef.current) return e.preventDefault();
     e.dataTransfer.setData("text/task", t.id);
     e.dataTransfer.effectAllowed = "move";
   };
@@ -171,7 +209,7 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
       </div>
 
       {/* Hour grid */}
-      <div ref={scroller} className="flex-1 overflow-y-auto">
+      <div ref={scroller} className={`flex-1 overflow-y-auto ${resizing ? "cursor-ns-resize select-none" : ""}`}>
         <div className="relative grid" style={{ ...cols, height: HOUR_PX * 24 }}>
           <div>
             {HOURS.map((h) => (
@@ -191,7 +229,7 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
             const placed = layoutBlocks<Item>(
               items.map((item): { item: Item; top: number; height: number } =>
                 item.kind === "task"
-                  ? { item, top: timeToMinutes(item.task.dueTime!), height: Math.max(item.task.durationMin ?? DEFAULT_BLOCK_MIN, 20) }
+                  ? { item, top: timeToMinutes(item.task.dueTime!), height: Math.max(durationOf(item.task), 20) }
                   : { item, top: item.startMin, height: Math.max(item.endMin - item.startMin, 20) },
               ),
             );
@@ -241,20 +279,35 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
                     );
                   }
                   const task = p.item.task;
+                  const active = resizing?.id === task.id;
                   return (
                     <button
                       key={task.id}
-                      draggable
+                      draggable={!active}
                       onDragStart={(ev) => onDragStart(ev, task)}
                       onClick={(ev) => {
                         ev.stopPropagation();
-                        onOpen(task.id);
+                        if (!justResized.current) onOpen(task.id);
                       }}
-                      className={`absolute overflow-hidden rounded border-l-4 px-1.5 py-0.5 text-left text-xs ${PRIORITY_BG[task.priority]}`}
+                      className={`group absolute overflow-hidden rounded border-l-4 px-1.5 py-0.5 text-left text-xs ${PRIORITY_BG[task.priority]} ${active ? "z-10 shadow-md ring-1 ring-accent" : ""}`}
                       style={pos}
                     >
                       <div className="truncate font-medium">{task.title}</div>
-                      <div className="opacity-70">{task.dueTime}</div>
+                      <div className="opacity-70">
+                        {task.dueTime}
+                        {active || task.durationMin ? ` · ${formatDuration(durationOf(task))}` : ""}
+                      </div>
+                      <div
+                        role="separator"
+                        aria-orientation="horizontal"
+                        aria-label={`Resize ${task.title}`}
+                        title="Drag to change duration"
+                        onPointerDown={(ev) => startResize(ev, task)}
+                        onMouseDown={(ev) => ev.stopPropagation()}
+                        className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
+                      >
+                        <div className={`mx-auto mt-0.5 h-0.5 w-6 rounded bg-current ${active ? "opacity-60" : "opacity-0 group-hover:opacity-40"}`} />
+                      </div>
                     </button>
                   );
                 })}

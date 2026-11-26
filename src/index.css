@@ -1,4 +1,34 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens. New UI uses these (bg-surface, text-ink-muted, border-line, ...)
+ * so a later reskin only has to change the values here.
+ */
+@theme {
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-surface-hover: #f1f5f9;
+  --color-ink: #0f172a;
+  --color-ink-muted: #64748b;
+  --color-line: #e2e8f0;
+  --color-accent: #4f46e5;
+  --color-accent-soft: #e0e7ff;
+  --color-accent-ink: #3730a3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface: #020617;
+    --color-surface-raised: #0f172a;
+    --color-surface-hover: #1e293b;
+    --color-ink: #f1f5f9;
+    --color-ink-muted: #94a3b8;
+    --color-line: #1e293b;
+    --color-accent: #818cf8;
+    --color-accent-soft: #1e1b4b;
+    --color-accent-ink: #c7d2fe;
+  }
+}
+
 :root { color-scheme: light dark; }
 body { @apply bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
