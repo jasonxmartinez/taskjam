@@ -246,6 +246,12 @@ export function placeTask(
   return next;
 }
 
+/** Deletes a task and its subtasks. */
+export function deleteTask(s: AppState, id: string): AppState {
+  if (!byId(s.tasks, id)) throw new Error("Task not found");
+  return { ...s, tasks: s.tasks.filter((t) => t.id !== id && t.parentId !== id) };
+}
+
 // ---------- completion & timer ----------
 
 /** Seconds recorded so far, including a running stretch. */
@@ -339,6 +345,42 @@ export function todayTasks(s: AppState, today: string): { overdue: Task[]; today
     overdue: live.filter((t) => t.dueDate! < today).sort(sortTasks),
     today: live.filter((t) => t.dueDate === today).sort(sortTasks),
   };
+}
+
+/** Tasks finished today that were on Today; they stay there, struck through, until tomorrow. */
+export function doneToday(s: AppState, today: string, now = Date.now()): Task[] {
+  return s.tasks
+    .filter((t) => t.completedAt && !t.parentId && t.dueDate && t.dueDate <= today && localDate(new Date(t.completedAt)) === localDate(new Date(now)))
+    .sort((a, b) => a.completedAt! - b.completedAt!);
+}
+
+/** Open tasks with a deadline in the next `days` days that are not already on Today. */
+export function deadlinesSoon(s: AppState, today: string, days = 3): Task[] {
+  const [y, m, d] = today.split("-").map(Number);
+  const last = localDate(new Date(y, m - 1, d + days));
+  return s.tasks
+    .filter((t) => open(t) && !t.parentId && t.deadline && t.deadline >= today && t.deadline <= last && !(t.dueDate && t.dueDate <= today))
+    .sort((a, b) => a.deadline!.localeCompare(b.deadline!) || a.priority - b.priority);
+}
+
+/** Open top-level tasks per project id, for sidebar counts. */
+export function openCounts(s: AppState): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const t of s.tasks) if (open(t) && !t.parentId) out.set(t.projectId, (out.get(t.projectId) ?? 0) + 1);
+  return out;
+}
+
+/** Planned duration typed by hand: "90", "45m", "2h", "1h30m", "1.5h", "1:30". Null if invalid. */
+export function parseDurationText(text: string): number | null {
+  const t = text.trim().toLowerCase().replace(/\s+/g, "");
+  if (!t) return null;
+  let m = /^(\d+):(\d{1,2})$/.exec(t);
+  if (m) return Number(m[1]) * 60 + Number(m[2]) || null;
+  if (/^\d+$/.test(t)) return Number(t) || null;
+  m = /^(?:(\d+(?:\.\d+)?)(?:h|hr|hrs|hours?))?(?:(\d+)(?:m|min|mins|minutes?))?$/.exec(t);
+  if (!m || (!m[1] && !m[2])) return null;
+  const min = Math.round(Number(m[1] ?? 0) * 60) + Number(m[2] ?? 0);
+  return min > 0 ? min : null;
 }
 
 export function subtasksOf(s: AppState, parentId: string): Task[] {

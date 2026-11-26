@@ -1,5 +1,6 @@
+import { Ellipsis, Plus } from "lucide-react";
 import { useRef, useState } from "react";
-import { addProject, canNestProject, placeProject, placeTask, projectTree, renameProject, setProjectColor } from "../model/db";
+import { addProject, canNestProject, openCounts, placeProject, placeTask, projectTree, renameProject, setProjectColor } from "../model/db";
 import { DEFAULT_PROJECT_COLOR, type Project } from "../model/types";
 import { useStore } from "../store";
 import { ColorDot, ColorPicker } from "./ColorPicker";
@@ -31,7 +32,7 @@ function NameField({ initial, placeholder, onDone }: { initial: string; placehol
         if (e.key === "Escape") finish(null);
         if (e.key === "Enter") finish(name.trim() ? name : null);
       }}
-      className="w-full min-w-0 rounded border border-line bg-surface px-1 py-0.5 text-sm"
+      className="w-full min-w-0 rounded-md border border-line-strong bg-surface px-2 py-1 text-sm outline-none"
     />
   );
 }
@@ -47,6 +48,7 @@ export function ProjectSidebar({
 }) {
   const { state, apply } = useStore();
   const tree = projectTree(state);
+  const counts = openCounts(state);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState<{ parentId: string | null; color: string } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -121,8 +123,8 @@ export function ProjectSidebar({
       : drop.zone === "inside"
         ? "bg-accent-soft ring-1 ring-accent"
         : drop.zone === "before"
-          ? "shadow-[inset_0_2px_0_var(--color-accent)]"
-          : "shadow-[inset_0_-2px_0_var(--color-accent)]";
+          ? "shadow-[inset_0_2px_0_var(--accent)]"
+          : "shadow-[inset_0_-2px_0_var(--accent)]";
 
   // ---- rows ----
   const row = (p: Project, child: boolean) => {
@@ -130,7 +132,7 @@ export function ProjectSidebar({
     return (
       <div
         key={p.id}
-        className={`group relative flex items-center rounded ${indicator(p)} ${dragging === p.id ? "opacity-40" : ""}`}
+        className={`group relative flex items-center rounded-[10px] ${indicator(p)} ${dragging === p.id ? "opacity-40" : ""}`}
         draggable={renaming !== p.id}
         onDragStart={(e) => {
           e.dataTransfer.setData(PROJECT_MIME, p.id);
@@ -148,7 +150,7 @@ export function ProjectSidebar({
         onDrop={(e) => onRowDrop(e, p)}
       >
         {renaming === p.id ? (
-          <div className={`flex w-full items-center gap-2 py-0.5 ${child ? "pl-6" : "pl-2"} pr-1`}>
+          <div className="flex w-full items-center gap-2 py-0.5 pl-3 pr-1" style={child ? { marginLeft: 16 } : undefined}>
             <ColorDot color={p.color} />
             <NameField
               initial={p.name}
@@ -161,35 +163,36 @@ export function ProjectSidebar({
           </div>
         ) : (
           <button
-            className={`${itemClass(active)} ${child ? "pl-6" : ""} pr-12`}
+            className={itemClass(active)}
+            style={child ? { marginLeft: 16 } : undefined}
             onClick={() => onSelect(p.id)}
             onDoubleClick={() => setRenaming(p.id)}
             title="Double-click to rename. Drag to reorder."
+            aria-current={active ? "page" : undefined}
           >
-            <span className="flex min-w-0 items-center gap-2">
-              <ColorDot color={p.color} />
-              <span className="truncate">{p.name}</span>
-            </span>
+            <ColorDot color={p.color} className="!h-[9px] !w-[9px]" />
+            <span className="min-w-0 truncate">{p.name}</span>
+            <span className="ml-auto text-xs font-normal text-ink-muted group-hover:opacity-0">{counts.get(p.id) || ""}</span>
           </button>
         )}
         {renaming !== p.id && (
-          <div className="absolute right-1 flex items-center opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+          <div className="absolute right-1.5 flex items-center opacity-0 group-hover:opacity-100 focus-within:opacity-100">
             {!child && (
-              <button className="px-1 text-ink-muted hover:text-ink" title="New subproject" onClick={() => setCreating({ parentId: p.id, color: DEFAULT_PROJECT_COLOR })}>
-                ＋
+              <button className="rounded p-0.5 text-ink-muted hover:text-ink" title="New subproject" aria-label={`New subproject in ${p.name}`} onClick={() => setCreating({ parentId: p.id, color: DEFAULT_PROJECT_COLOR })}>
+                <Plus size={14} strokeWidth={1.75} aria-hidden />
               </button>
             )}
-            <button className="px-1 text-ink-muted hover:text-ink" title="Edit project" aria-label={`Edit ${p.name}`} onClick={() => setMenu(menu === p.id ? null : p.id)}>
-              ⋯
+            <button className="rounded p-0.5 text-ink-muted hover:text-ink" title="Edit project" aria-label={`Edit ${p.name}`} onClick={() => setMenu(menu === p.id ? null : p.id)}>
+              <Ellipsis size={14} strokeWidth={1.75} aria-hidden />
             </button>
           </div>
         )}
         {menu === p.id && (
           <>
             <div className="fixed inset-0 z-20" onClick={() => setMenu(null)} />
-            <div className="absolute left-4 top-full z-30 mt-1 w-56 space-y-2 rounded-md border border-line bg-surface-raised p-2 shadow-lg">
+            <div className="tj-pop tj-anim-pop absolute left-4 top-full z-30 mt-1 w-56 space-y-2 p-2" style={{ transformOrigin: "top left" }}>
               <button
-                className="w-full rounded px-2 py-1 text-left text-sm hover:bg-surface-hover"
+                className="w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-surface-hover"
                 onClick={() => {
                   setMenu(null);
                   setRenaming(p.id);
@@ -210,7 +213,7 @@ export function ProjectSidebar({
 
   const newField = (parentId: string | null) =>
     creating && creating.parentId === parentId ? (
-      <div className={`mt-1 space-y-2 rounded border border-line bg-surface-raised p-2 ${parentId ? "ml-4" : ""}`}>
+      <div className={`mt-1 space-y-2 rounded-[10px] border border-line bg-surface-raised p-2 shadow-raised ${parentId ? "ml-4" : ""}`}>
         <NameField
           initial=""
           placeholder={parentId ? "Subproject name" : "Project name"}
@@ -227,10 +230,10 @@ export function ProjectSidebar({
 
   return (
     <>
-      <div className="flex items-center justify-between px-2 pt-4 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+      <div className="tj-label flex items-center justify-between px-3 pb-2 pt-5">
         Projects
-        <button title="New project" onClick={() => setCreating({ parentId: null, color: DEFAULT_PROJECT_COLOR })}>
-          ＋
+        <button className="rounded p-0.5 hover:text-ink" title="New project" aria-label="New project" onClick={() => setCreating({ parentId: null, color: DEFAULT_PROJECT_COLOR })}>
+          <Plus size={14} strokeWidth={1.75} aria-hidden />
         </button>
       </div>
       {tree.map(({ project, children }) => (
@@ -241,7 +244,7 @@ export function ProjectSidebar({
         </div>
       ))}
       {newField(null)}
-      {error && <div className="px-2 text-xs text-red-600">{error}</div>}
+      {error && <div className="px-3 text-xs text-danger">{error}</div>}
     </>
   );
 }

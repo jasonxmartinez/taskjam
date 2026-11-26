@@ -3,8 +3,11 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import { App } from "./App";
 import { hideQuickAddWindow } from "./platform";
+import { applyTheme, loadSettings } from "./settings";
 import { StoreProvider } from "./store";
 import { QuickAdd } from "./ui/QuickAdd";
+
+applyTheme(loadSettings().theme);
 
 // The Mac shell opens a small second window at "#quick" for the global shortcut.
 const isQuickWindow = window.location.hash === "#quick";
