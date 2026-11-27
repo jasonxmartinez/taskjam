@@ -107,3 +107,15 @@ export function formatDuration(min: number): string {
   const m = min % 60;
   return [h && `${h}h`, m && `${m}m`].filter(Boolean).join(" ") || "0m";
 }
+
+/**
+ * New start time while dragging a block: `topPx` is where the block's top edge would sit
+ * (pointer position minus where the block was grabbed). Snapped to 15 minutes and kept
+ * inside the day, so the whole block (start through end) stays on the calendar.
+ */
+export function dragStartMinutes(topPx: number, durationMin: number): number {
+  const raw = (topPx / HOUR_PX) * 60;
+  const snapped = Math.round(raw / SNAP_MIN) * SNAP_MIN;
+  const latest = 24 * 60 - Math.max(SNAP_MIN, Math.ceil(Math.min(durationMin, 24 * 60) / SNAP_MIN) * SNAP_MIN);
+  return Math.max(0, Math.min(latest, snapped));
+}

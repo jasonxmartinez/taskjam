@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addTask, emptyState } from "../model/db";
-import { addDays, dayRange, formatDuration, layoutTimed, minutesToTime, resizeDuration, snapMinutes } from "./layout";
+import { addDays, dayRange, dragStartMinutes, formatDuration, layoutTimed, minutesToTime, resizeDuration, snapMinutes } from "./layout";
 
 const mk = (title: string, dueTime: string, durationMin: number | null = null) =>
   addTask(emptyState(), { title, dueDate: "2026-11-25", dueTime, durationMin }).task;
@@ -18,6 +18,17 @@ describe("calendar layout", () => {
     expect(minutesToTime(snapMinutes(48 * 9 + 20))).toBe("09:30"); // 9:25 -> 9:30
     expect(minutesToTime(snapMinutes(48 * 100))).toBe("23:45");
     expect(snapMinutes(-50)).toBe(0);
+  });
+
+  it("moves a dragged block by its top edge, not by where it was grabbed", () => {
+    // Grabbed 30 minutes below the top (24px) and released with the pointer at 10:00:
+    // the block's top edge sits at 9:30, so that is the new start.
+    expect(minutesToTime(dragStartMinutes(48 * 10 - 24, 60))).toBe("09:30");
+    expect(minutesToTime(dragStartMinutes(48 * 9 + 5, 30))).toBe("09:00"); // 9:06 -> 9:00
+    expect(dragStartMinutes(-100, 60)).toBe(0);
+    // A 2-hour block can't start after 22:00, so its end stays on the calendar.
+    expect(minutesToTime(dragStartMinutes(48 * 23.5, 120))).toBe("22:00");
+    expect(minutesToTime(dragStartMinutes(48 * 30, 20))).toBe("23:30");
   });
 
   it("puts overlapping tasks in separate lanes and non-overlapping ones apart", () => {
