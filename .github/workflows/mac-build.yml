@@ -1,0 +1,55 @@
+name: Build Mac app
+
+# Builds Todojam.dmg for any Mac (Apple Silicon and Intel) and attaches it to a
+# GitHub release. Runs on pushes to main (so the download always matches main),
+# on v* tags, and on demand from the Actions tab.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mac-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --target universal-apple-darwin
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest-mac' }}
+          releaseName: Todojam for Mac
+          releaseBody: |
+            Download the **.dmg** file below, open it, and drag Todojam into Applications.
+            First launch: macOS will say it can't verify the developer. Open System Settings > Privacy & Security, scroll down, and click **Open Anyway**.
+          releaseDraft: false
+          prerelease: false
+          updaterJsonKeepUniversal: false
