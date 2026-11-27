@@ -1,11 +1,11 @@
 name: Build Mac app
 
 # Builds Todojam.dmg for any Mac (Apple Silicon and Intel) and attaches it to a
-# GitHub release. Runs on pushes to main and to claude/* branches, on v* tags,
-# and on demand from the Actions tab.
+# GitHub release. Runs on pushes to main (so the download always matches main),
+# on v* tags, and on demand from the Actions tab.
 on:
   push:
-    branches: [main, "claude/**"]
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
