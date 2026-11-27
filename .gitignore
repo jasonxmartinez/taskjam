@@ -4,3 +4,11 @@ dist
 .DS_Store
 src-tauri/target
 src-tauri/gen
+
+# Never commit secrets: signing keys, env files, OAuth client files
+*.key
+*.pem
+.env
+.env.*
+TAURI_SIGNING_PRIVATE_KEY*
+client_secret*.json
