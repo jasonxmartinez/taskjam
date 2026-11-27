@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, Flag } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { addDays, dayRange, DEFAULT_BLOCK_MIN, formatDuration, HOUR_PX, layoutBlocks, minutesToTime, resizeDuration, snapMinutes, timeToMinutes } from "../calendar/layout";
+import { addDays, dayRange, DEFAULT_BLOCK_MIN, dragStartMinutes, formatDuration, HOUR_PX, layoutBlocks, minutesToTime, resizeDuration, snapMinutes, timeToMinutes } from "../calendar/layout";
 import { eventsForDay, type CalEvent } from "../google/events";
 import { useGoogleEvents } from "../google/useGoogleEvents";
 import { localDate, updateTask } from "../model/db";
@@ -122,11 +122,42 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
   };
   const durationOf = (t: Task) => (resizing?.id === t.id ? resizing.durationMin : (t.durationMin ?? DEFAULT_BLOCK_MIN));
 
-  const onDragStart = (e: React.DragEvent, t: Task) => {
+  // Dragging a task moves the whole block: the pointer keeps its spot on the block, the
+  // block's top edge becomes the new start time, and the duration stays the same. While
+  // dragging over the hour grid, an outline shows exactly where the block will land.
+  const dragRef = useRef<{ id: string; grabPx: number; durationMin: number } | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [landing, setLanding] = useState<{ day: string; startMin: number } | null>(null);
+  const onDragStart = (e: React.DragEvent, t: Task, timed: boolean) => {
     if (resizeRef.current) return e.preventDefault();
     e.dataTransfer.setData("text/task", t.id);
     e.dataTransfer.effectAllowed = "move";
+    // Untimed tasks come from the all-day row; for those the pointer marks the start.
+    const grabPx = timed ? e.clientY - e.currentTarget.getBoundingClientRect().top : 0;
+    dragRef.current = { id: t.id, grabPx, durationMin: durationOf(t) };
+    // Dim the original on the next frame, after the browser has captured the drag image.
+    requestAnimationFrame(() => dragRef.current?.id === t.id && setDraggingId(t.id));
   };
+  const endDrag = () => {
+    dragRef.current = null;
+    setDraggingId(null);
+    setLanding(null);
+  };
+  // Where the dragged block's top edge lands in a day column, in minutes from midnight.
+  const landingStart = (e: React.DragEvent, column: HTMLElement) => {
+    const d = dragRef.current;
+    const y = e.clientY - column.getBoundingClientRect().top;
+    return d ? dragStartMinutes(y - d.grabPx, d.durationMin) : snapMinutes(y);
+  };
+  useEffect(() => {
+    if (!draggingId) return;
+    // Hide the landing outline once the pointer leaves the hour grid.
+    const onOver = (e: DragEvent) => {
+      if (!(e.target as HTMLElement | null)?.closest?.("[data-day]")) setLanding(null);
+    };
+    document.addEventListener("dragover", onOver);
+    return () => document.removeEventListener("dragover", onOver);
+  }, [draggingId]);
   const allow = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
@@ -206,6 +237,7 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
             onDrop={(e) => {
               const id = e.dataTransfer.getData("text/task");
               if (id) move(id, d, null);
+              endDrag();
             }}
           >
             {eventsForDay(google.events, d).allDay.map((e) => (
@@ -215,7 +247,8 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
               <button
                 key={t.id}
                 draggable
-                onDragStart={(e) => onDragStart(e, t)}
+                onDragStart={(e) => onDragStart(e, t, false)}
+                onDragEnd={endDrag}
                 onClick={() => onOpen(t.id)}
                 className="block w-full truncate rounded-md px-2 py-0.5 text-left text-xs"
                 style={{ background: tint(t) }}
@@ -268,12 +301,16 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
                 key={d}
                 data-day={d}
                 className="relative border-l border-line"
-                onDragOver={allow}
+                onDragOver={(e) => {
+                  allow(e);
+                  if (!dragRef.current) return;
+                  const startMin = landingStart(e, e.currentTarget);
+                  if (landing?.day !== d || landing.startMin !== startMin) setLanding({ day: d, startMin });
+                }}
                 onDrop={(e) => {
                   const id = e.dataTransfer.getData("text/task");
-                  if (!id) return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  move(id, d, minutesToTime(snapMinutes(e.clientY - rect.top)));
+                  if (id) move(id, d, minutesToTime(landingStart(e, e.currentTarget)));
+                  endDrag();
                 }}
                 onClick={(e) => {
                   if (e.target !== e.currentTarget && !(e.target as HTMLElement).dataset.slot) return;
@@ -311,16 +348,18 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
                   }
                   const task = p.item.task;
                   const active = resizing?.id === task.id;
+                  const lifted = draggingId === task.id;
                   return (
                     <button
                       key={task.id}
                       draggable={!active}
-                      onDragStart={(ev) => onDragStart(ev, task)}
+                      onDragStart={(ev) => onDragStart(ev, task, true)}
+                      onDragEnd={endDrag}
                       onClick={(ev) => {
                         ev.stopPropagation();
                         if (!justResized.current) onOpen(task.id);
                       }}
-                      className={`group absolute overflow-hidden rounded-[10px] px-2.5 py-1 text-left text-[13px] leading-[18px] ${active ? "z-10 shadow-overlay ring-1 ring-accent" : ""}`}
+                      className={`group absolute overflow-hidden rounded-[10px] px-2.5 py-1 text-left text-[13px] leading-[18px] ${active ? "z-10 shadow-overlay ring-1 ring-accent" : ""} ${lifted ? "opacity-40" : ""}`}
                       style={{ ...pos, background: tint(task) }}
                       title={`${task.title}, ${formatDuration(durationOf(task))}`}
                     >
@@ -342,6 +381,25 @@ export function CalendarView({ onOpen, onQuickAdd }: { onOpen: (id: string) => v
                     </button>
                   );
                 })}
+                {landing?.day === d && dragRef.current && (() => {
+                  const dragged = state.tasks.find((t) => t.id === dragRef.current!.id);
+                  const dur = dragRef.current.durationMin;
+                  const time = minutesToTime(landing.startMin);
+                  return (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute left-1 right-1 z-10 overflow-hidden rounded-[10px] border-2 border-dashed border-accent px-2.5 py-1 text-[13px] leading-[18px] shadow-overlay"
+                      style={{
+                        top: (landing.startMin / 60) * HOUR_PX + 1,
+                        height: (Math.max(dur, 20) / 60) * HOUR_PX - 3,
+                        background: dragged ? tint(dragged) : undefined,
+                      }}
+                    >
+                      <div className="truncate">{dragged?.title}</div>
+                      <div className="truncate text-[11px] leading-[14px] text-ink-muted">{timeRange(time, dur)}</div>
+                    </div>
+                  );
+                })()}
                 {d === today && (
                   <div className="pointer-events-none absolute left-0 right-0 z-20 border-t border-danger" style={{ top: (nowMin / 60) * HOUR_PX }}>
                     <span className="absolute -left-[5px] -top-[5px] h-[9px] w-[9px] rounded-full bg-danger" />
