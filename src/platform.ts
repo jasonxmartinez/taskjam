@@ -59,3 +59,32 @@ export async function setLaunchAtLogin(on: boolean) {
   const a = await import("@tauri-apps/plugin-autostart");
   await (on ? a.enable() : a.disable());
 }
+
+export type AppUpdate = { version: string; install: () => Promise<void> };
+
+/** The installed app's version, or null in the browser. */
+export async function appVersion(): Promise<string | null> {
+  if (!isTauri()) return null;
+  const { getVersion } = await import("@tauri-apps/api/app");
+  return getVersion();
+}
+
+/** Asks GitHub for a newer build. Null when up to date, offline, or in the browser. */
+export async function checkForUpdate(): Promise<AppUpdate | null> {
+  if (!isTauri()) return null;
+  try {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const update = await check();
+    if (!update) return null;
+    return {
+      version: update.version,
+      install: async () => {
+        await update.downloadAndInstall();
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      },
+    };
+  } catch {
+    return null;
+  }
+}

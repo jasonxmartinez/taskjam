@@ -1,24 +1,27 @@
 name: Build Mac app
 
-# Builds Todojam.dmg for any Mac (Apple Silicon and Intel) and attaches it to a
-# GitHub release. Runs on pushes to main (so the download always matches main),
-# on v* tags, and on demand from the Actions tab.
+# Builds a universal (Apple Silicon + Intel) Todojam.dmg and publishes it, plus the
+# signed update files the app's built-in updater reads, to the `latest-mac` release.
+# Runs on every push to main and on demand from the Actions tab. Each build gets
+# version 0.1.<run number>, so installed apps see it as newer and offer "Update now".
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: mac-build-${{ github.ref }}
-  cancel-in-progress: true
+  group: mac-build
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: macos-latest
+    env:
+      VERSION: 0.1.${{ github.run_number }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,17 +42,32 @@ jobs:
 
       - run: npm test
 
+      - name: Stamp this build's version
+        run: node -e 'const f="src-tauri/tauri.conf.json",fs=require("fs"),c=JSON.parse(fs.readFileSync(f));c.version=process.env.VERSION;fs.writeFileSync(f,JSON.stringify(c,null,2))'
+
+      - name: Remove the previous build's files from the release
+        run: |
+          gh release view latest-mac --json assets --jq '.assets[].name' 2>/dev/null \
+            | grep -v '^Todojam.dmg$' \
+            | while read -r name; do gh release delete-asset latest-mac "$name" -y; done || true
+
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           args: --target universal-apple-darwin
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest-mac' }}
+          tagName: latest-mac
           releaseName: Todojam for Mac
           releaseBody: |
-            Download the **.dmg** file below, open it, and drag Todojam into Applications.
+            Download **Todojam.dmg** below, open it, and drag Todojam into Applications.
             First launch: macOS will say it can't verify the developer. Open System Settings > Privacy & Security, scroll down, and click **Open Anyway**.
+            After that, Todojam offers new versions itself with an "Update now" button.
           releaseDraft: false
           prerelease: false
-          updaterJsonKeepUniversal: false
+
+      - name: Publish the download under a fixed name (Todojam.dmg)
+        run: |
+          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg Todojam.dmg
+          gh release upload latest-mac Todojam.dmg --clobber
