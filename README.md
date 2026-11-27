@@ -27,6 +27,10 @@ npm run build
 
 ## Mac app (Tauri)
 
+**Install:** download [Todojam.dmg](https://github.com/jasonxmartinez/taskjam/releases/download/latest-mac/Todojam.dmg), drag Todojam to Applications, open it, then System Settings > Privacy & Security > Open Anyway (first launch only). Every push to `main` builds a new version (`.github/workflows/mac-build.yml`), and the app shows "Update now" in the sidebar when one is out (also Settings > Check for updates). Updates are signed with a key stored in the `TAURI_SIGNING_PRIVATE_KEY` repo secret; its public half is in `tauri.conf.json`.
+
+To build it yourself instead:
+
 Needs Rust ([rustup.rs](https://rustup.rs)) and Xcode command line tools (`xcode-select --install`).
 
 ```sh
@@ -38,7 +42,6 @@ npm run app:build   # builds Todojam.app and a .dmg in src-tauri/target/release/
 - Global shortcut **Cmd+Shift+Space** opens a small quick-add window from any app.
 - Closing the window keeps Todojam running in the menu bar so reminders still fire. Quit from the menu bar icon.
 - Settings > Launch at login keeps it running after restarts.
-- The first launch of an unsigned app: right-click the app, choose Open, once.
 
 ## Layout
 

@@ -41,6 +41,15 @@
     "macOS": {
       "signingIdentity": "-",
       "minimumSystemVersion": "11.0"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgwNEI1NzVBRDI4MDhDQjQKUldTMGpJRFNXbGRMZ0pFSWY4ZEd0aVpESXBoK3dEL2NLb1d4cmwvU1NzMXc3TmRXZUkvL3hiOGEK",
+      "endpoints": [
+        "https://github.com/jasonxmartinez/taskjam/releases/download/latest-mac/latest.json"
+      ]
     }
   }
 }

@@ -1,7 +1,7 @@
 import { ChartNoAxesColumn, Calendar, Inbox, Plus, Settings as SettingsIcon, Sun } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { elapsedSec, formatHMS, inboxTasks, localDate, placeTask, todayTasks } from "./model/db";
-import { isTauri, setLaunchAtLogin, setTrayTitle } from "./platform";
+import { checkForUpdate, isTauri, setLaunchAtLogin, setTrayTitle, type AppUpdate } from "./platform";
 import { useReminders } from "./reminders/useReminders";
 import { applyTheme, loadSettings, saveSettings, type Settings } from "./settings";
 import { ICON } from "./ui/common";
@@ -47,6 +47,17 @@ export function App() {
     void setLaunchAtLogin(true);
   }, []);
   useReminders(state, settings, setOpen);
+
+  // Look for a newer Mac build on launch and every 6 hours.
+  const [update, setUpdate] = useState<AppUpdate | null>(null);
+  const [installing, setInstalling] = useState(false);
+  useEffect(() => {
+    if (!isTauri()) return;
+    const look = () => void checkForUpdate().then((u) => u && setUpdate(u));
+    look();
+    const id = setInterval(look, 6 * 60 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Show the running timer in the Mac menu bar.
   useEffect(() => {
@@ -133,6 +144,22 @@ export function App() {
           {nav("stats", "Stats", <ChartNoAxesColumn {...ICON} />)}
           <ProjectSidebar activeId={view.kind === "project" ? view.id : null} onSelect={(id) => setView({ kind: "project", id })} itemClass={item} />
         </nav>
+        {update && (
+          <div className="mt-2 rounded-[10px] bg-accent-soft p-3 text-sm">
+            <div className="font-medium">Update available</div>
+            <div className="mb-2 text-xs text-ink-muted">Version {update.version}. Todojam restarts after updating.</div>
+            <button
+              className="tj-btn tj-btn-primary tj-btn-sm w-full"
+              disabled={installing}
+              onClick={() => {
+                setInstalling(true);
+                update.install().catch(() => setInstalling(false));
+              }}
+            >
+              {installing ? "Updating…" : "Update now"}
+            </button>
+          </div>
+        )}
         <button className={`${item(showSettings)} mt-2`} onClick={() => setShowSettings(true)}>
           <SettingsIcon {...ICON} />
           Settings
@@ -148,7 +175,7 @@ export function App() {
         </div>
       </main>
       {quick && <QuickAdd defaults={quickDefaults ?? defaults} onClose={() => { setQuick(false); setQuickDefaults(null); }} />}
-      {showSettings && <SettingsDialog settings={settings} onChange={updateSettings} onClose={() => setShowSettings(false)} onGoogleChange={() => setGoogleVersion((v) => v + 1)} />}
+      {showSettings && <SettingsDialog settings={settings} onChange={updateSettings} onClose={() => setShowSettings(false)} onGoogleChange={() => setGoogleVersion((v) => v + 1)} onUpdateFound={setUpdate} />}
       {open && <TaskDetail key={open.id} id={open.id} mode={open.mode} onClose={() => setOpen(null)} onOpen={(id) => setOpen(id)} />}
     </div>
   );

@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { connectGoogle, disconnectGoogle, googleAvailable, loadGoogle } from "../google/client";
-import { ensureNotificationPermission, getLaunchAtLogin, isTauri, notificationsGranted, setLaunchAtLogin } from "../platform";
+import { appVersion, checkForUpdate, ensureNotificationPermission, getLaunchAtLogin, isTauri, notificationsGranted, setLaunchAtLogin, type AppUpdate } from "../platform";
 import type { Settings, Theme } from "../settings";
 import { ICON } from "./common";
 
@@ -31,7 +31,29 @@ function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (on:
   );
 }
 
-export function SettingsDialog({ settings, onChange, onClose, onGoogleChange }: { settings: Settings; onChange: (s: Settings) => void; onClose: () => void; onGoogleChange: () => void }) {
+export function SettingsDialog({
+  settings,
+  onChange,
+  onClose,
+  onGoogleChange,
+  onUpdateFound,
+}: {
+  settings: Settings;
+  onChange: (s: Settings) => void;
+  onClose: () => void;
+  onGoogleChange: () => void;
+  onUpdateFound: (u: AppUpdate) => void;
+}) {
+  const [version, setVersion] = useState<string | null>(null);
+  const [checking, setChecking] = useState<"idle" | "busy" | "latest" | "found">("idle");
+  useEffect(() => void appVersion().then(setVersion), []);
+  const checkNow = () => {
+    setChecking("busy");
+    void checkForUpdate().then((u) => {
+      if (u) onUpdateFound(u);
+      setChecking(u ? "found" : "latest");
+    });
+  };
   const [google, setGoogle] = useState(loadGoogle);
   const [gBusy, setGBusy] = useState(false);
   const [gError, setGError] = useState<string | null>(null);
@@ -213,7 +235,17 @@ export function SettingsDialog({ settings, onChange, onClose, onGoogleChange }: 
         </div>
 
         <div className="flex items-center justify-between border-t border-line px-6 py-3">
-          <span className="text-xs text-ink-muted">Changes save automatically</span>
+          <span className="flex items-center gap-3 text-xs text-ink-muted">
+            Changes save automatically
+            {version && (
+              <>
+                <span>· Version {version}</span>
+                <button className="tj-btn tj-btn-secondary tj-btn-sm" disabled={checking === "busy"} onClick={checkNow}>
+                  {checking === "busy" ? "Checking…" : checking === "latest" ? "Up to date" : checking === "found" ? "Update in sidebar" : "Check for updates"}
+                </button>
+              </>
+            )}
+          </span>
           <button className="tj-btn tj-btn-primary" onClick={onClose}>
             Done
           </button>
